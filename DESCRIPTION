@@ -11,6 +11,11 @@ Depends:
     dplyr,
     extrafont
 Imports:
+    egg,
+    tidyr,
+    purrr,
+    lubridate,
+    readr
 Suggests:
 License: GPL-2
 Repository: CRAN
