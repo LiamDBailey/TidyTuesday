@@ -15,7 +15,10 @@ Imports:
     tidyr,
     purrr,
     lubridate,
-    readr
+    readr,
+    sp,
+    rgeos,
+    rgdal
 Suggests:
 License: GPL-2
 Repository: CRAN

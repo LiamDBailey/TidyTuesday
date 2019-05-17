@@ -1,0 +1,246 @@
+CountryName,CapitalLatitude,CapitalLongitude,CountryCode,ContinentName
+Afghanistan,34.51666667,69.183333,AF,Asia
+Aland Islands,60.116667,19.9,AX,Europe
+Albania,41.31666667,19.816667,AL,Europe
+Algeria,36.75,3.05,DZ,Africa
+American Samoa,-14.26666667,-170.7,AS,Australia
+Andorra,42.5,1.516667,AD,Europe
+Angola,-8.833333333,13.216667,AO,Africa
+Anguilla,18.21666667,-63.05,AI,North America
+Antarctica,0,0,AQ,Antarctica
+Antigua and Barbuda,17.11666667,-61.85,AG,North America
+Argentina,-34.58333333,-58.666667,AR,South America
+Armenia,40.16666667,44.5,AM,Europe
+Aruba,12.51666667,-70.033333,AW,North America
+Australia,-35.26666667,149.133333,AU,Australia
+Austria,48.2,16.366667,AT,Europe
+Azerbaijan,40.38333333,49.866667,AZ,Europe
+Bahamas,25.08333333,-77.35,BS,North America
+Bahrain,26.23333333,50.566667,BH,Asia
+Bangladesh,23.71666667,90.4,BD,Asia
+Barbados,13.1,-59.616667,BB,North America
+Belarus,53.9,27.566667,BY,Europe
+Belgium,50.83333333,4.333333,BE,Europe
+Belize,17.25,-88.766667,BZ,Central America
+Benin,6.483333333,2.616667,BJ,Africa
+Bermuda,32.28333333,-64.783333,BM,North America
+Bhutan,27.46666667,89.633333,BT,Asia
+Bolivia,-16.5,-68.15,BO,South America
+Bosnia and Herzegovina,43.86666667,18.416667,BA,Europe
+Botswana,-24.63333333,25.9,BW,Africa
+Brazil,-15.78333333,-47.916667,BR,South America
+British Indian Ocean Territory,-7.3,72.4,IO,Africa
+British Virgin Islands,18.41666667,-64.616667,VG,North America
+Brunei Darussalam,4.883333333,114.933333,BN,Asia
+Bulgaria,42.68333333,23.316667,BG,Europe
+Burkina Faso,12.36666667,-1.516667,BF,Africa
+Burundi,-3.366666667,29.35,BI,Africa
+Cambodia,11.55,104.916667,KH,Asia
+Cameroon,3.866666667,11.516667,CM,Africa
+Canada,45.41666667,-75.7,CA,Central America
+Cape Verde,14.91666667,-23.516667,CV,Africa
+Cayman Islands,19.3,-81.383333,KY,North America
+Central African Republic,4.366666667,18.583333,CF,Africa
+Chad,12.1,15.033333,TD,Africa
+Chile,-33.45,-70.666667,CL,South America
+China,39.91666667,116.383333,CN,Asia
+Christmas Island,-10.41666667,105.716667,CX,Australia
+Cocos Islands,-12.16666667,96.833333,CC,Australia
+Colombia,4.6,-74.083333,CO,South America
+Comoros,-11.7,43.233333,KM,Africa
+Cook Islands,-21.2,-159.766667,CK,Australia
+Costa Rica,9.933333333,-84.083333,CR,Central America
+Cote d'Ivoire,6.816666667,-5.266667,CI,Africa
+Croatia,45.8,16,HR,Europe
+Cuba,23.11666667,-82.35,CU,North America
+Curaçao,12.1,-68.916667,CW,North America
+Cyprus,35.16666667,33.366667,CY,Europe
+Czech Republic,50.08333333,14.466667,CZ,Europe
+Democratic Republic of the Congo,-4.316666667,15.3,CD,Africa
+Denmark,55.66666667,12.583333,DK,Europe
+Djibouti,11.58333333,43.15,DJ,Africa
+Dominica,15.3,-61.4,DM,North America
+Dominican Republic,18.46666667,-69.9,DO,North America
+Ecuador,-0.216666667,-78.5,EC,South America
+Egypt,30.05,31.25,EG,Africa
+El Salvador,13.7,-89.2,SV,Central America
+Equatorial Guinea,3.75,8.783333,GQ,Africa
+Eritrea,15.33333333,38.933333,ER,Africa
+Estonia,59.43333333,24.716667,EE,Europe
+Ethiopia,9.033333333,38.7,ET,Africa
+Falkland Islands,-51.7,-57.85,FK,South America
+Faroe Islands,62,-6.766667,FO,Europe
+Federated States of Micronesia,6.916666667,158.15,FM,Australia
+Fiji,-18.13333333,178.416667,FJ,Australia
+Finland,60.16666667,24.933333,FI,Europe
+France,48.86666667,2.333333,FR,Europe
+French Polynesia,-17.53333333,-149.566667,PF,Australia
+French Southern and Antarctic Lands,-49.35,70.216667,TF,Antarctica
+Gabon,0.383333333,9.45,GA,Africa
+Georgia,41.68333333,44.833333,GE,Europe
+Germany,52.51666667,13.4,DE,Europe
+Ghana,5.55,-0.216667,GH,Africa
+Gibraltar,36.13333333,-5.35,GI,Europe
+Greece,37.98333333,23.733333,GR,Europe
+Greenland,64.18333333,-51.75,GL,Central America
+Grenada,12.05,-61.75,GD,North America
+Guam,13.46666667,144.733333,GU,Australia
+Guatemala,14.61666667,-90.516667,GT,Central America
+Guernsey,49.45,-2.533333,GG,Europe
+Guinea,9.5,-13.7,GN,Africa
+Guinea-Bissau,11.85,-15.583333,GW,Africa
+Guyana,6.8,-58.15,GY,South America
+Haiti,18.53333333,-72.333333,HT,North America
+Heard Island and McDonald Islands,0,0,HM,Antarctica
+Honduras,14.1,-87.216667,HN,Central America
+Hong Kong,0,0,HK,Asia
+Hungary,47.5,19.083333,HU,Europe
+Iceland,64.15,-21.95,IS,Europe
+India,28.6,77.2,IN,Asia
+Indonesia,-6.166666667,106.816667,ID,Asia
+Iran,35.7,51.416667,IR,Asia
+Iraq,33.33333333,44.4,IQ,Asia
+Ireland,53.31666667,-6.233333,IE,Europe
+Isle of Man,54.15,-4.483333,IM,Europe
+Israel,31.76666667,35.233333,IL,Asia
+Italy,41.9,12.483333,IT,Europe
+Jamaica,18,-76.8,JM,North America
+Japan,35.68333333,139.75,JP,Asia
+Jersey,49.18333333,-2.1,JE,Europe
+Jordan,31.95,35.933333,JO,Asia
+Kazakhstan,51.16666667,71.416667,KZ,Asia
+Kenya,-1.283333333,36.816667,KE,Africa
+Kiribati,-0.883333333,169.533333,KI,Australia
+Kosovo,42.66666667,21.166667,KO,Europe
+Kuwait,29.36666667,47.966667,KW,Asia
+Kyrgyzstan,42.86666667,74.6,KG,Asia
+Laos,17.96666667,102.6,LA,Asia
+Latvia,56.95,24.1,LV,Europe
+Lebanon,33.86666667,35.5,LB,Asia
+Lesotho,-29.31666667,27.483333,LS,Africa
+Liberia,6.3,-10.8,LR,Africa
+Libya,32.88333333,13.166667,LY,Africa
+Liechtenstein,47.13333333,9.516667,LI,Europe
+Lithuania,54.68333333,25.316667,LT,Europe
+Luxembourg,49.6,6.116667,LU,Europe
+Macau,0,0,MO,Asia
+Macedonia,42,21.433333,MK,Europe
+Madagascar,-18.91666667,47.516667,MG,Africa
+Malawi,-13.96666667,33.783333,MW,Africa
+Malaysia,3.166666667,101.7,MY,Asia
+Maldives,4.166666667,73.5,MV,Asia
+Mali,12.65,-8,ML,Africa
+Malta,35.88333333,14.5,MT,Europe
+Marshall Islands,7.1,171.383333,MH,Australia
+Mauritania,18.06666667,-15.966667,MR,Africa
+Mauritius,-20.15,57.483333,MU,Africa
+Mexico,19.43333333,-99.133333,MX,Central America
+Moldova,47,28.85,MD,Europe
+Monaco,43.73333333,7.416667,MC,Europe
+Mongolia,47.91666667,106.916667,MN,Asia
+Montenegro,42.43333333,19.266667,ME,Europe
+Montserrat,16.7,-62.216667,MS,North America
+Morocco,34.01666667,-6.816667,MA,Africa
+Mozambique,-25.95,32.583333,MZ,Africa
+Myanmar,16.8,96.15,MM,Asia
+Namibia,-22.56666667,17.083333,NA,Africa
+Nauru,-0.5477,166.920867,NR,Australia
+Nepal,27.71666667,85.316667,NP,Asia
+Netherlands,52.35,4.916667,NL,Europe
+New Caledonia,-22.26666667,166.45,NC,Australia
+New Zealand,-41.3,174.783333,NZ,Australia
+Nicaragua,12.13333333,-86.25,NI,Central America
+Niger,13.51666667,2.116667,NE,Africa
+Nigeria,9.083333333,7.533333,NG,Africa
+Niue,-19.01666667,-169.916667,NU,Australia
+Norfolk Island,-29.05,167.966667,NF,Australia
+North Korea,39.01666667,125.75,KP,Asia
+Northern Cyprus,35.183333,33.366667,NULL,Europe
+Northern Mariana Islands,15.2,145.75,MP,Australia
+Norway,59.91666667,10.75,NO,Europe
+Oman,23.61666667,58.583333,OM,Asia
+Pakistan,33.68333333,73.05,PK,Asia
+Palau,7.483333333,134.633333,PW,Australia
+Palestine,31.76666667,35.233333,PS,Asia
+Panama,8.966666667,-79.533333,PA,Central America
+Papua New Guinea,-9.45,147.183333,PG,Australia
+Paraguay,-25.26666667,-57.666667,PY,South America
+Peru,-12.05,-77.05,PE,South America
+Philippines,14.6,120.966667,PH,Asia
+Pitcairn Islands,-25.06666667,-130.083333,PN,Australia
+Poland,52.25,21,PL,Europe
+Portugal,38.71666667,-9.133333,PT,Europe
+Puerto Rico,18.46666667,-66.116667,PR,North America
+Qatar,25.28333333,51.533333,QA,Asia
+Republic of Congo,-4.25,15.283333,CG,Africa
+Romania,44.43333333,26.1,RO,Europe
+Russia,55.75,37.6,RU,Europe
+Rwanda,-1.95,30.05,RW,Africa
+Saint Barthelemy,17.88333333,-62.85,BL,North America
+Saint Helena,-15.93333333,-5.716667,SH,Africa
+Saint Kitts and Nevis,17.3,-62.716667,KN,North America
+Saint Lucia,14,-61,LC,North America
+Saint Martin,18.0731,-63.0822,MF,North America
+Saint Pierre and Miquelon,46.76666667,-56.183333,PM,Central America
+Saint Vincent and the Grenadines,13.13333333,-61.216667,VC,Central America
+Samoa,-13.81666667,-171.766667,WS,Australia
+San Marino,43.93333333,12.416667,SM,Europe
+Sao Tome and Principe,0.333333333,6.733333,ST,Africa
+Saudi Arabia,24.65,46.7,SA,Asia
+Senegal,14.73333333,-17.633333,SN,Africa
+Serbia,44.83333333,20.5,RS,Europe
+Seychelles,-4.616666667,55.45,SC,Africa
+Sierra Leone,8.483333333,-13.233333,SL,Africa
+Singapore,1.283333333,103.85,SG,Asia
+Sint Maarten,18.01666667,-63.033333,SX,North America
+Slovakia,48.15,17.116667,SK,Europe
+Slovenia,46.05,14.516667,SI,Europe
+Solomon Islands,-9.433333333,159.95,SB,Australia
+Somalia,2.066666667,45.333333,SO,Africa
+Somaliland,9.55,44.05,NULL,Africa
+South Africa,-25.7,28.216667,ZA,Africa
+South Georgia and South Sandwich Islands,-54.283333,-36.5,GS,Antarctica
+South Korea,37.55,126.983333,KR,Asia
+South Sudan,4.85,31.616667,SS,Africa
+Spain,40.4,-3.683333,ES,Europe
+Sri Lanka,6.916666667,79.833333,LK,Asia
+Sudan,15.6,32.533333,SD,Africa
+Suriname,5.833333333,-55.166667,SR,South America
+Svalbard,78.21666667,15.633333,SJ,Europe
+Swaziland,-26.31666667,31.133333,SZ,Africa
+Sweden,59.33333333,18.05,SE,Europe
+Switzerland,46.91666667,7.466667,CH,Europe
+Syria,33.5,36.3,SY,Asia
+Taiwan,25.03333333,121.516667,TW,Asia
+Tajikistan,38.55,68.766667,TJ,Asia
+Tanzania,-6.8,39.283333,TZ,Africa
+Thailand,13.75,100.516667,TH,Asia
+The Gambia,13.45,-16.566667,GM,Africa
+Timor-Leste,-8.583333333,125.6,TL,Asia
+Togo,6.116666667,1.216667,TG,Africa
+Tokelau,-9.166667,-171.833333,TK,Australia
+Tonga,-21.13333333,-175.2,TO,Australia
+Trinidad and Tobago,10.65,-61.516667,TT,North America
+Tunisia,36.8,10.183333,TN,Africa
+Turkey,39.93333333,32.866667,TR,Europe
+Turkmenistan,37.95,58.383333,TM,Asia
+Turks and Caicos Islands,21.46666667,-71.133333,TC,North America
+Tuvalu,-8.516666667,179.216667,TV,Australia
+Uganda,0.316666667,32.55,UG,Africa
+Ukraine,50.43333333,30.516667,UA,Europe
+United Arab Emirates,24.46666667,54.366667,AE,Asia
+United Kingdom,51.5,-0.083333,GB,Europe
+United States,38.883333,-77,US,Central America
+Uruguay,-34.85,-56.166667,UY,South America
+US Minor Outlying Islands,38.883333,-77,UM,Australia
+US Virgin Islands,18.35,-64.933333,VI,North America
+Uzbekistan,41.31666667,69.25,UZ,Asia
+Vanuatu,-17.73333333,168.316667,VU,Australia
+Vatican City,41.9,12.45,VA,Europe
+Venezuela,10.48333333,-66.866667,VE,South America
+Vietnam,21.03333333,105.85,VN,Asia
+Wallis and Futuna,-13.95,-171.933333,WF,Australia
+Western Sahara,27.153611,-13.203333,EH,Africa
+Yemen,15.35,44.2,YE,Asia
+Zambia,-15.41666667,28.283333,ZM,Africa
+Zimbabwe,-17.81666667,31.033333,ZW,Africa
