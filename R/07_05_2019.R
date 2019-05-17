@@ -1,13 +1,15 @@
 #' Create plot of student teacher ratios.
 #'
 #' Create a plot of GDP and student teacher ratios over time.
+#'
 #' @param animated Logical. Should an animated (gif) or static (png) plot be returned?
+#' @param log Should axes be plotted on the log scale? Can be "x", "y", or "xy".
 #'
 #' @return
 #' @export
 #' @import gganimate
 
-plot_07_05_19 <- function(animated = TRUE){
+plot_07_05_19 <- function(animated = TRUE, log = "x"){
   
   #Load data
   student_ratio <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-07/student_teacher_ratio.csv")
@@ -58,9 +60,6 @@ plot_07_05_19 <- function(animated = TRUE){
       ggrepel::geom_label_repel(data = filter(student_ratio_GDP, country_code %in% worst$country_code),
                                 aes(x = GDP, y = student_ratio, label = country), nudge_x = 1, segment.size = 0.5, family = "Ubuntu", size = 6)+
       scale_colour_viridis_d()+
-      #facet_wrap(facets = ~indicator)+
-      #scale_y_log10()+
-      scale_x_log10()+
       labs(caption = "\nVisualisation by @ldbailey255 | GDP data: data.worldbank.org | Student ratio data: UNESCO",
            y = "Primary student-teacher ratio", x = "GDP per capita")+
       scale_y_continuous(limits = c(0, NA))+
@@ -77,18 +76,31 @@ plot_07_05_19 <- function(animated = TRUE){
       gganimate::shadow_mark(alpha = 0.25, wrap = FALSE, size = 2, exclude_layer = 2:3)+
       gganimate::ease_aes("linear")
     
+    if(stringr::str_detect(log, "x")){
+      
+      animated_plot <- animated_plot +
+        scale_x_log10()
+      
+    }
+    
+    if(stringr::str_detect(log, "y")){
+      
+      animated_plot <- animated_plot +
+        scale_y_log10()
+      
+    }
+    
     options(gganimate.dev_args = list(width = 600, height = 520))
     
     gganimate::anim_save("./plots/07_05_19.gif", animation = animated_plot)
+    
+    return(animated_plot)
     
   } else {
    
     non_animated <- ggplot() +
       geom_point(data = student_ratio_GDP, aes(x = GDP, y = student_ratio, colour = country_code, size = GDP), alpha = 0.7)+
       scale_colour_viridis_d()+
-      #facet_wrap(facets = ~indicator)+
-      #scale_y_log10()+
-      scale_x_log10()+
       labs(caption = "\nVisualisation by @ldbailey255 \n GDP data: data.worldbank.org | Student ratio data: UNESCO",
            y = "Primary student-teacher ratio", x = "GDP per capita")+
       scale_y_continuous(limits = c(0, NA))+
@@ -100,7 +112,23 @@ plot_07_05_19 <- function(animated = TRUE){
             axis.title.x = element_text(family = "Ubuntu", size = 17, colour = "black", margin = margin(t = 10)),
             legend.position = "none")
     
+    if(stringr::str_detect(log, "x")){
+      
+      non_animated <- non_animated +
+        scale_x_log10()
+      
+    }
+    
+    if(stringr::str_detect(log, "y")){
+      
+      non_animated <- non_animated +
+        scale_y_log10()
+      
+    }
+    
     ggsave(plot = non_animated, filename = "./plots/07_05_2019.png", width = 6, height = 5.2, dpi = 300)
+    
+    return(non_animated)
     
   }
   
