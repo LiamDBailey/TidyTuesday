@@ -9,7 +9,8 @@ Depends:
     R (>= 2.10),
     ggplot2,
     dplyr,
-    extrafont
+    extrafont,
+    devtools
 Imports:
     egg,
     tidyr,
@@ -17,8 +18,17 @@ Imports:
     lubridate,
     readr,
     sp,
+    sf,
     rgeos,
-    rgdal
+    rgdal,
+    gganimate,
+    reshape2,
+    stringr,
+    stringi,
+    glue,
+    forcats,
+    ggrepel,
+    gridExtra
 Suggests:
 License: GPL-2
 Repository: CRAN
