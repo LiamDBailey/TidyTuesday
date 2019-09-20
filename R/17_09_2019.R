@@ -95,7 +95,7 @@ plot_17_09_19 <- function(){
   #Combine plots
   combo_plot <- gridExtra::grid.arrange(plot1, plot2, nrow = 1)
   
-  ggsave(plot = combo_plot, "./plots/17_09_19.png", width = 10.4, height = 5.2, dpi = 600)
+  ggsave(plot = combo_plot, "./plots/17_09_19.png", width = 10, height = 5, dpi = 600)
   
   return(combo_plot)
   
