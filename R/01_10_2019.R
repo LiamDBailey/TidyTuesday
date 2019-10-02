@@ -19,7 +19,7 @@ plot_01_10_19 <- function(wrap_size = 15, hex_size = 1000){
                                proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")) %>% 
     #Transform to have the same CRS as the Manhattan polygon
     sp::spTransform(., CRS(sp::proj4string(NYC_sp))) %>% 
-    #Filter only those records in Manhattan
+    #Filter only those records in Manhattan (where the majority of reviews are)
     #Note, have to use subset (rather than dplyr::filter) for SpatialPointsDataFrame 
     subset(., complete.cases(sp::over(., NYC_sp)))
   
@@ -126,11 +126,11 @@ plot_01_10_19 <- function(wrap_size = 15, hex_size = 1000){
           legend.text = element_text(family = "Alfa Slab One", face = "plain", size = 10),
           legend.title = element_text(family = "Alfa Slab One", face = "plain", size = 12, vjust = 0.85),
           legend.position = "bottom",
-          plot.margin = margin(r = -10, l = -10, unit = "mm")) +
+          plot.margin = margin(r = 0, l = 0, t = 5, b = 5, unit = "mm")) +
     guides(fill = guide_colourbar(barwidth = unit(85, "mm"), barheight = unit(8, "mm")),
            colour = "none")
   
-  ggsave(base_plot_coarse, filename = "./plots/01_10_19.jpeg", width = 8, height = 8, dpi = 600)
+  ggsave(base_plot_coarse, filename = "./plots/01_10_19.png", width = 8, height = 8, dpi = 600)
   
   return(base_plot_coarse)
   
