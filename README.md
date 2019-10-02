@@ -12,3 +12,15 @@ My attempts at the #TidyTuesday data science projects (https://thomasmock.netlif
 ## May 15th: Geographic spread of Nobel Prize laureates
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/15_05_19.png)
+
+## Sept 10th: Distribution of amusement park injuries across the body
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/10_09_19_detailed.png)
+
+## Sept 17th: Changes in US National Park visitor density over time
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/17_09_19.png)
+
+## Oct 1st: Map of Manhattan's best pizza (according to Barstool sports)
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/01_10_19.png)
