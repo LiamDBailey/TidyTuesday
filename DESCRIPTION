@@ -28,7 +28,8 @@ Imports:
     glue,
     forcats,
     ggrepel,
-    gridExtra
+    gridExtra,
+    ggtext
 Suggests:
 License: GPL-2
 Repository: CRAN
