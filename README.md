@@ -24,3 +24,7 @@ My attempts at the #TidyTuesday data science projects (https://thomasmock.netlif
 ## Oct 1st: Map of Manhattan's best pizza (according to Barstool sports)
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/01_10_19.png)
+
+## Oct 8th: Who are the world's best powerlifters?
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/08_10_19.png)
