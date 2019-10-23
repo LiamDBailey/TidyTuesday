@@ -28,3 +28,11 @@ My attempts at the #TidyTuesday data science projects (https://thomasmock.netlif
 ## Oct 8th: Who are the world's best powerlifters?
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/08_10_19.png)
+
+## Oct 15th: How have car emissions changed over time (in the US)?
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/15_10_19_plots/15_10_19.png)
+
+## Oct 22nd: When are the most horror movies released?
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/22_10_19.png)
