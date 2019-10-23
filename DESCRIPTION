@@ -29,7 +29,8 @@ Imports:
     forcats,
     ggrepel,
     gridExtra,
-    ggtext
+    ggtext,
+    Cairo
 Suggests:
 License: GPL-2
 Repository: CRAN
