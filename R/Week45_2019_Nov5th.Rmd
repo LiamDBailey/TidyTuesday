@@ -158,9 +158,9 @@ breaks = seq(0, 12, 2), limits = c(0, 12)) +
                                ticks.colour = "transparent",
                                title.position = 'top',
                                title.hjust = 0.5,
-                               title.vjust = -6,
+                               title.vjust = -2,
                                label.hjust = 0.5,
-                               label.vjust = 7)) +
+                               label.vjust = 4)) +
   theme_classic() +
   theme(axis.line = element_blank(),
         axis.ticks = element_blank(),
@@ -168,6 +168,7 @@ breaks = seq(0, 12, 2), limits = c(0, 12)) +
         axis.title = element_blank(),
         plot.title = element_text(family = "Supermercado One", size = 100, hjust = 0.5, vjust = 0),
         plot.subtitle = element_text(family = "Supermercado One", size = 80, hjust = 0.5, vjust = 0),
+        plot.caption = element_text(family = "Supermercado One", size = 50),
         plot.margin = margin(t = 0, r = 2, b = 2, l = 2, unit = "cm"),
         plot.background = element_rect(fill = "white"),
         panel.background = element_rect(fill = "white"),
