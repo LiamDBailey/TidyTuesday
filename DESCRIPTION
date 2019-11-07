@@ -32,6 +32,8 @@ Imports:
     ggtext,
     Cairo
 Suggests:
+    knitr,
+    rmarkdown
 License: GPL-2
 Repository: CRAN
 LazyData: True
