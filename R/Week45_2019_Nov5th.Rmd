@@ -24,6 +24,7 @@ library(sysfonts)
 library(rcartocolor)
 #For spatial manipulation
 library(sf)
+library(rgdal)
 
 ```
 
@@ -138,7 +139,8 @@ us_point_join <- sf::st_join(us_map_grid, plot_data_sf) %>%
 ggplot()+
   geom_sf(data = us_point_join, aes(fill = mean_cycle)) +
   labs(title = paste0(emo::ji("bicycle"), " Cycling in the US ", emo::ji("bicycle")),
-       subtitle = "Where do people cycle to work most?") +
+       subtitle = "Where do people cycle to work most?",
+       caption = "Plot: @ldbailey255 | Data: ACS Survey") +
   scale_fill_gradientn(colours = c("#217a79",
 "#348c82",
 "#499d89",
@@ -175,7 +177,7 @@ breaks = seq(0, 12, 2), limits = c(0, 12)) +
         legend.text = element_text(family = "Supermercado One", size = 50),
         legend.margin = margin(t = 0, b = 0, r = 3, l = 3, unit = "mm"))
 
-ggplot2::ggsave(filename = "./plots/5_11_2019.png", height = 10, width = 15)
+ggplot2::ggsave(filename = "../plots/5_11_2019.png", height = 10, width = 15)
 
 ```
 
