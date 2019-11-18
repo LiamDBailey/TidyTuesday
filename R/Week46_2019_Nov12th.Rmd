@@ -1,0 +1,180 @@
+---
+title: "Week46_12_11_19"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Week46_12_11_19}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+
+library(ggExtra)
+library(showtext)
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+
+devtools::load_all()
+
+```
+
+Create defaults
+
+```{r}
+
+options(scipen = 100)
+
+#Set ggplot theme
+current_theme <- theme_classic() +
+  theme(legend.position = c(0.65, 0.35),
+        legend.direction = "horizontal",
+        legend.margin = margin(0, 0, 0, -5),
+        legend.justification = c(0, 0),
+        legend.text = element_text(family = "Courier New", size = 10),
+        legend.title = element_text(family = "Courier New", size = 15),
+        legend.text.align = 0,
+        legend.spacing.x = unit(x = 0.25, units = "cm"),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_text(colour = "black", family = "Courier New", size = 10),
+        axis.title = element_text(colour = "black", family = "Courier New", size = 20),
+        plot.title = element_text(family = "Courier New", face = "bold", colour = "black",
+                                  size = 20, vjust = 0),
+        plot.subtitle = element_text(family = "Courier New", colour = "black",
+                                     size = 15, vjust = 0),
+        plot.caption = element_text(family = "Courier New", colour = "black",
+                                     size = 7),
+        plot.background = element_rect(fill = "white", size = 5),
+        panel.background = element_rect(fill = "white"),
+        plot.margin = margin(t = 10, r = 10, b = 10, l = 0, unit = "mm"))
+  
+  theme_set(current_theme)
+
+```
+
+```{r}
+
+cran_code <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-11-12/loc_cran_packages.csv")
+
+data("cran_dld_list_complete")
+
+```
+
+```{r, eval = FALSE}
+
+unique_pkgs <- unique(cran_code$pkg_name)
+
+library("dlstats")
+
+pb <- dplyr::progress_estimated(n = length(unique_pkgs))
+
+cran_dld_list_complete <- purrr::map(.x = unique_pkgs, .f = ~{
+  
+  pb$print()$tick()
+  
+  output <- tryCatch(cran_stats(..1), error = function(e){
+    
+    return(tibble::tibble(start = NA_character_,
+                          end = NA_character_,
+                          downloads = NA_integer_,
+                          package = ..1))
+  })
+  
+  return(output)
+  
+}) %>% 
+  dplyr::bind_rows()
+
+usethis::use_data(cran_dld_list, overwrite = TRUE)
+
+```
+
+# Determine total lines of code for all packages
+
+Code impact method 1
+
+In this method we just look at total downloads/line.
+
+This will obviously bias longer-lived packages, but gives an idea of the total impact a package has had.
+
+We need to know:
+
+a) number lines of code
+b) total downloads
+
+```{r}
+
+total_lines <- cran_code %>% 
+  dplyr::group_by(pkg_name) %>% 
+  dplyr::summarise(total_lines = sum(code))  %>% 
+  #There are some cases where the number of lines of code are small
+  #We exclude everything <2. 1 line seem to be datasets.
+  dplyr::filter(total_lines > 1)
+
+total_dlds <- cran_dld_list_complete %>% 
+  dplyr::group_by(package) %>% 
+  dplyr::summarise(downloads = sum(downloads))
+
+code_impact <- dplyr::left_join(total_lines, total_dlds, by = c("pkg_name" = "package")) %>% 
+  dplyr::mutate(code_impact = downloads/total_lines) %>% 
+  dplyr::filter(total_lines < 50000)
+
+```
+
+Create arrow data for some of the best packages
+
+```{r}
+
+#Add highest impact package
+hi_impact <- code_impact %>%
+  dplyr::filter(code_impact == max(.$code_impact)) %>% 
+  dplyr::mutate(text = "With 74 lines but >8 million downloads, the `dichromat` package has had the highest impact per line")
+hi_dlds   <- code_impact %>%
+  dplyr::filter(downloads == max(.$downloads)) %>% 
+  dplyr::mutate(text = "Pipe is king! `magrittr` has had over 30 million downloads!")
+
+curve_data <- dplyr::bind_rows(hi_impact, hi_dlds)
+
+```
+
+Plot the code impact (i.e. download_rate ~ total_lines)
+
+```{r}
+
+ggplot(code_impact) +
+  geom_point(aes(x = total_lines, y = downloads, fill = code_impact, size = code_impact), shape = 21, alpha = 0.5) +
+  geom_curve(data = curve_data,
+             aes(xend = total_lines, yend = downloads, x = total_lines + 15000, y = downloads - 5000000),
+             arrow = arrow(length = unit(0.1, units = "inches")), curvature = 0.1) +
+  geom_text(data = curve_data,
+            aes(x = total_lines + 20000, y = downloads - 6000000, label = stringr::str_wrap(text, 30)),
+            size = 5, family = "Courier New") +
+  coord_cartesian(clip = "off") +
+  labs(title = "Which R package has had the most impact?",
+       subtitle = "Relationship between lines of code and total downloads",
+       caption = "Plot: @ldbailey255 | Data: CRAN") +
+  scale_fill_gradientn(colours = c("#004c6d", "#1b5a7d", "#2e698c", "#3e789d",
+                                   "#4e87ad", "#5e96be", "#6ea6cf", "#7eb7e0", "#8ec7f2"),
+                       na.value = "black", name = "Code impact \n (downloads/line)") +
+  scale_x_continuous(breaks = seq(0, 50000, 10000),
+                     labels = glue::glue('{number}K', number = seq(0, 50, 10)),
+                     name = "Total lines (all languages)") +
+  scale_y_continuous(breaks = seq(0, 30000000, 10000000),
+                     labels = glue::glue('{number}M', number = seq(0, 30, 10)),
+                     name = "Total downloads") +
+  guides(fill = guide_colorbar(direction = "horizontal",
+                               barheight = unit(5, units = "mm"), 
+                               barwidth = unit(50, units = "mm"),
+                               draw.ulim = FALSE, 
+                               ticks.colour = "transparent",
+                               title.position = 'top',
+                               title.hjust = 0.5,
+                               title.vjust = -2,
+                               label.hjust = 0.5,
+                               label.vjust = 4),
+         size = "none")
+
+ggplot2::ggsave(filename = "../plots/Week46.png", height = 10, width = 12, dpi = 600, type = "cairo")
+
+```
