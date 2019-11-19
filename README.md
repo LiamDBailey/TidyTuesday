@@ -36,3 +36,11 @@ My attempts at the #TidyTuesday data science projects (https://thomasmock.netlif
 ## Oct 22nd: When are the most horror movies released?
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/22_10_19.png)
+
+## Nov 5th: Cycling activity in US towns and cities
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/5_11_2019.png)
+
+## Nov 12th: Impact of different R packages.
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46.png)
