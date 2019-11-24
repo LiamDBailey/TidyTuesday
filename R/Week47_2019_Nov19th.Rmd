@@ -3,6 +3,21 @@ title: "Week47_2019_Nov19th"
 output: html_document
 ---
 
+Set options and load packages for plotting
+
+```{r}
+
+options(scipen = 100)
+
+library(ggplot2)
+library(egg)
+library(extrafont)
+library(dplyr)
+library(grid)
+library(png)
+
+```
+
 Load data
 
 ```{r}
@@ -28,7 +43,9 @@ voterID  <- rep(1:nr_unique, 5)
 voterID  <- voterID[order(voterID)]
 
 nz_birds_processed <- nz_bird %>% 
-  dplyr::mutate(voterID = {{voterID}}) %>% 
+  dplyr::mutate(voterID = {{voterID}},
+                bird_breed = iconv(bird_breed, "UTF-8")) %>% 
+  dplyr::filter(!is.na(bird_breed)) %>% 
   #For every unique voter, create a list of their votes
   #and assign their first vote and current vote (which will identical before runoff)
   dplyr::group_by(voterID) %>% 
@@ -46,38 +63,131 @@ Now we want to create a function that will carry out the instant runoff
 #after the runoff. It is 2 by default, but we may want to do fewer if we want to animate the process
 runoff <- function(end_grps = 2, data){
   
-  bird_grps <- data %>% 
+  bird_grps <- data %>%
+    dplyr::filter(!is.na(current_vote)) %>%
     dplyr::group_by(current_vote) %>% 
     dplyr::summarise(total_votes = n()) %>% 
     dplyr::arrange(-total_votes)
   
+  eliminated <- list()
+  
+  pb <- dplyr::progress_estimated(n = nrow(bird_grps) - 1)
+  
   while(nrow(bird_grps) > end_grps){
     
-    lowest_votes = bird_grps$current_vote[nrow(bird_grps)]
+    pb$print()$tick()
+    
+    lowest_votes = bird_grps %>% 
+      dplyr::filter(!is.na(current_vote)) %>% 
+      dplyr::slice(n()) %>% 
+      dplyr::pull(current_vote)
+    
+    eliminated <- append(eliminated, lowest_votes)
     
     data <- data %>% 
       dplyr::mutate(current_vote = purrr::map2_chr(.x = data$votes, .y = data$current_vote,
                                                .f = function(all_votes, current_vote, lowest_votes){
     
-    if(current_vote == lowest_votes){
-        
-        if(current_vote == all_votes[5]){
-            
-            return(NULL)
-            
-        } else {
-            
-            current_vote <- all_votes[which(all_votes == lowest_votes) + 1]
-            
-        }
-        
+    #If the current vote is 'NA' this mean the 5 votes have been exhausted
+    while(current_vote %in% eliminated){
+      
+      current_vote <- all_votes[which(all_votes == current_vote) + 1]
+      
     }
     
     return(current_vote) 
     
 }, lowest_votes))
+    
+    bird_grps <- data %>% 
+      dplyr::filter(!is.na(current_vote)) %>% 
+      dplyr::group_by(current_vote) %>%
+      dplyr::summarise(total_votes = n()) %>%
+      dplyr::arrange(-total_votes)
+  
+  }
+  
+  return(data %>% 
+           dplyr::filter(!is.na(current_vote)))
   
 }
 
 ```
 
+Carry out instant run-off to find the top two birds
+
+```{r}
+
+top2_runoff <- runoff(data = nz_birds_processed)
+
+```
+
+Identify the top voting groups and classify the rest as other
+
+```{r}
+
+top5 <- top2_runoff %>% 
+  dplyr::group_by(first_vote) %>% 
+  dplyr::summarise(n = n()) %>% 
+  dplyr::arrange(-n) %>% 
+  dplyr::slice(1:5)
+
+top2_runoff <- top2_runoff %>% 
+  dplyr::mutate(fill_grp = factor(purrr::map_chr(.x = first_vote, .f = ~{
+    
+    if(..1 %in% top5$first_vote){
+      
+      return(..1)
+      
+    } else {
+      
+      return("Other")
+      
+    }
+    
+  }), levels = c("Other", "Banded Dotterel", "Black Robin", "Kea", "Yellow-eyed penguin", "Kakapo")))
+
+#Read in bird png images
+kakapo   <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "kakapo.png", package = "TidyTuesday", mustWork = TRUE)),
+                                            width = unit(3, "cm"), height = unit(3, "cm"))
+kea      <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "kea.png", package = "TidyTuesday", mustWork = TRUE)),
+                                            width = unit(3, "cm"), height = unit(3, "cm"))
+dotterel <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "dotterel.png", package = "TidyTuesday", mustWork = TRUE)),
+                                            width = unit(3, "cm"), height = unit(3, "cm"))
+robin    <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "blackrobin.png", package = "TidyTuesday", mustWork = TRUE)),
+                                            width = unit(3, "cm"), height = unit(3, "cm"))
+penguin  <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "penguin.png", package = "TidyTuesday", mustWork = TRUE)),
+                                            width = unit(3, "cm"), height = unit(3, "cm"))
+
+bird_legend <- tibble(x = 1,
+                      y = seq(0.15, 0.85, length.out = 5)) %>%
+  mutate(grob = list(kakapo, kea, dotterel, robin, penguin),
+         text = c("Kakapo", "Kea", "Banded \n Dotterel", "Black Robin", "Yellow-eyed \n Penguin"))
+
+bars <- ggplot() +
+  geom_bar(data = top2_runoff, aes(x = current_vote, fill = fill_grp), colour = "black", size = 1) +
+  scale_y_continuous(limits = c(0, 11000), breaks = seq(0, 10000, 2500), name = "Total votes") +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank()) +
+  scale_fill_manual(values = c("#CB9173", "#b5773a", "black", "#4b5439", "#4b4c61", "#798c23"))
+  
+bars <- ggplot2::ggplotGrob(bars)
+
+ggplot()+
+  scale_x_continuous(limits = c(0, 1.25), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(title = "Who is New Zealands favourite bird?", caption = "Plot: @ldbailey255 | Data: dragonfly.co.nz") +
+  annotation_custom(grob = bars, xmin = 0, xmax = 0.95, ymin = 0, ymax = 1) +
+  egg::geom_custom(data = bird_legend, aes(x = x, y = y, data = grob), grob_fun = "identity") +
+  geom_text(data = bird_legend, aes(x = x + 0.15, y = y, label = text), size = 7, family = "Ubuntu") +
+  theme_classic() +
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+ggplot2::ggsave(filename = "../plots/Week47_2019.png", height = 10, width = 12, dpi = 300, type = "cairo")
+
+```
