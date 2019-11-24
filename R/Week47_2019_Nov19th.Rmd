@@ -3,26 +3,81 @@ title: "Week47_2019_Nov19th"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+Load data
+
+```{r}
+
+nz_bird <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-11-19/nz_bird.csv")
+
 ```
 
-## R Markdown
+We have two ideas:
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+1. Show the top two birds and the distribution of their votes that came from preference flow from other birds.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+2. Create an animation to how the real time spread of votes over time.
 
-```{r cars}
-summary(cars)
+Format the data for our purposes.
+
+- Create a unique value for every group of 5 rows (i.e. a unique vote ID)
+
+```{r}
+
+nr_unique <- length(which(nz_bird$vote_rank == "vote_5"))
+voterID  <- rep(1:nr_unique, 5)
+voterID  <- voterID[order(voterID)]
+
+nz_birds_processed <- nz_bird %>% 
+  dplyr::mutate(voterID = {{voterID}}) %>% 
+  #For every unique voter, create a list of their votes
+  #and assign their first vote and current vote (which will identical before runoff)
+  dplyr::group_by(voterID) %>% 
+  dplyr::summarise(votes = list(bird_breed),
+                   first_vote = first(bird_breed),
+                   current_vote = first(bird_breed))
+
 ```
 
-## Including Plots
+Now we want to create a function that will carry out the instant runoff
 
-You can also embed plots, for example:
+```{r}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#end_grps is the number of groups that will be left over
+#after the runoff. It is 2 by default, but we may want to do fewer if we want to animate the process
+runoff <- function(end_grps = 2, data){
+  
+  bird_grps <- data %>% 
+    dplyr::group_by(current_vote) %>% 
+    dplyr::summarise(total_votes = n()) %>% 
+    dplyr::arrange(-total_votes)
+  
+  while(nrow(bird_grps) > end_grps){
+    
+    lowest_votes = bird_grps$current_vote[nrow(bird_grps)]
+    
+    data <- data %>% 
+      dplyr::mutate(current_vote = purrr::map2_chr(.x = data$votes, .y = data$current_vote,
+                                               .f = function(all_votes, current_vote, lowest_votes){
+    
+    if(current_vote == lowest_votes){
+        
+        if(current_vote == all_votes[5]){
+            
+            return(NULL)
+            
+        } else {
+            
+            current_vote <- all_votes[which(all_votes == lowest_votes) + 1]
+            
+        }
+        
+    }
+    
+    return(current_vote) 
+    
+}, lowest_votes))
+  
+}
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -29,8 +29,7 @@ Imports:
     forcats,
     ggrepel,
     gridExtra,
-    ggtext,
-    Cairo
+    ggtext
 Suggests:
     knitr,
     rmarkdown
