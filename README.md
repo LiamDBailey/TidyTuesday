@@ -44,3 +44,7 @@ My attempts at the #TidyTuesday data science projects (https://thomasmock.netlif
 ## Nov 12th: Impact of different R packages.
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png)
+
+## Nov 19th: NZ Bird of the Year
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week47_2019.png)
