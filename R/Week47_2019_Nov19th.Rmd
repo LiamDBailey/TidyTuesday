@@ -7,14 +7,17 @@ Set options and load packages for plotting
 
 ```{r}
 
+#Change how R deals with scientific notation
 options(scipen = 100)
 
+#Load required libraries
 library(ggplot2)
 library(egg)
 library(extrafont)
 library(dplyr)
 library(grid)
 library(png)
+library(ggtext)
 
 ```
 
@@ -31,6 +34,8 @@ We have two ideas:
 1. Show the top two birds and the distribution of their votes that came from preference flow from other birds.
 
 2. Create an animation to how the real time spread of votes over time.
+
+# Idea 1:
 
 Format the data for our purposes.
 
@@ -63,31 +68,38 @@ Now we want to create a function that will carry out the instant runoff
 #after the runoff. It is 2 by default, but we may want to do fewer if we want to animate the process
 runoff <- function(end_grps = 2, data){
   
+  #Group votes by each bird (excluding NAs)
   bird_grps <- data %>%
     dplyr::filter(!is.na(current_vote)) %>%
     dplyr::group_by(current_vote) %>% 
     dplyr::summarise(total_votes = n()) %>% 
     dplyr::arrange(-total_votes)
   
+  #Create a list to store eliminated birds
   eliminated <- list()
   
   pb <- dplyr::progress_estimated(n = nrow(bird_grps) - 1)
   
+  #While there are more than 2 birds left...
   while(nrow(bird_grps) > end_grps){
     
     pb$print()$tick()
     
+    #Determine the bird with the lowest votes currently
     lowest_votes = bird_grps %>% 
       dplyr::filter(!is.na(current_vote)) %>% 
       dplyr::slice(n()) %>% 
       dplyr::pull(current_vote)
     
+    #Add this bird to the eliminated list
     eliminated <- append(eliminated, lowest_votes)
     
+    #For each row check if they are currently voting for an eliminated bird
     data <- data %>% 
       dplyr::mutate(current_vote = purrr::map2_chr(.x = data$votes, .y = data$current_vote,
                                                .f = function(all_votes, current_vote, lowest_votes){
     
+    #If bird has been eliminated, move to the next preference that is not eliminated
     #If the current vote is 'NA' this mean the 5 votes have been exhausted
     while(current_vote %in% eliminated){
       
@@ -99,6 +111,7 @@ runoff <- function(end_grps = 2, data){
     
 }, lowest_votes))
     
+    #Regroup data by birds and remove NAs (i.e. exhausted votes)
     bird_grps <- data %>% 
       dplyr::filter(!is.na(current_vote)) %>% 
       dplyr::group_by(current_vote) %>%
@@ -126,12 +139,14 @@ Identify the top voting groups and classify the rest as other
 
 ```{r}
 
+#Determine the top 5 birds for primary votes
 top5 <- top2_runoff %>% 
   dplyr::group_by(first_vote) %>% 
   dplyr::summarise(n = n()) %>% 
   dplyr::arrange(-n) %>% 
   dplyr::slice(1:5)
 
+#For all birds not in the top5 classify them as 'other'
 top2_runoff <- top2_runoff %>% 
   dplyr::mutate(fill_grp = factor(purrr::map_chr(.x = first_vote, .f = ~{
     
@@ -145,49 +160,69 @@ top2_runoff <- top2_runoff %>%
       
     }
     
-  }), levels = c("Other", "Banded Dotterel", "Black Robin", "Kea", "Yellow-eyed penguin", "Kakapo")))
+    #Relevel to fit our plot
+  }), levels = c("Kakapo", "Yellow-eyed penguin", "Kea", "Black Robin", "Banded Dotterel", "Other")))
 
 #Read in bird png images
+other   <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "other.png", package = "TidyTuesday", mustWork = TRUE)),
+                                            width = unit(2.5, "cm"), height = unit(2.5, "cm"))
 kakapo   <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "kakapo.png", package = "TidyTuesday", mustWork = TRUE)),
-                                            width = unit(3, "cm"), height = unit(3, "cm"))
+                                            width = unit(2.5, "cm"), height = unit(2.5, "cm"))
 kea      <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "kea.png", package = "TidyTuesday", mustWork = TRUE)),
-                                            width = unit(3, "cm"), height = unit(3, "cm"))
+                                            width = unit(2.5, "cm"), height = unit(2.5, "cm"))
 dotterel <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "dotterel.png", package = "TidyTuesday", mustWork = TRUE)),
-                                            width = unit(3, "cm"), height = unit(3, "cm"))
+                                            width = unit(2.5, "cm"), height = unit(2.5, "cm"))
 robin    <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "blackrobin.png", package = "TidyTuesday", mustWork = TRUE)),
-                                            width = unit(3, "cm"), height = unit(3, "cm"))
+                                            width = unit(2.5, "cm"), height = unit(2.5, "cm"))
 penguin  <- grid::rasterGrob(png::readPNG(source = system.file("extdata/NZ_birds", "penguin.png", package = "TidyTuesday", mustWork = TRUE)),
-                                            width = unit(3, "cm"), height = unit(3, "cm"))
+                                            width = unit(2.5, "cm"), height = unit(2.5, "cm"))
 
+#Add png images with locations and text to a tibble
 bird_legend <- tibble(x = 1,
-                      y = seq(0.15, 0.85, length.out = 5)) %>%
-  mutate(grob = list(kakapo, kea, dotterel, robin, penguin),
-         text = c("Kakapo", "Kea", "Banded \n Dotterel", "Black Robin", "Yellow-eyed \n Penguin"))
+                      y = seq(0.15, 0.85, length.out = 6)) %>%
+  mutate(grob = list(other, kakapo, kea, dotterel, robin, penguin),
+         text = c("<span style = 'color:#6a3b7d'>Other</span>",
+                  "<span style = 'color:#98b02c'>Kakapo</span>",
+                  "<span style = 'color:#4b5439'>Kea</span>",
+                  "<span style = 'color:#b5773a'>Banded <br> Dotterel</span>",
+                  "<span style = 'color:black'>Black Robin</span>",
+                  "<span style = 'color:#4b4c61'>Yellow-eyed <br> Penguin</span>"))
 
+#Create bar graph and convert to grob
 bars <- ggplot() +
   geom_bar(data = top2_runoff, aes(x = current_vote, fill = fill_grp), colour = "black", size = 1) +
   scale_y_continuous(limits = c(0, 11000), breaks = seq(0, 10000, 2500), name = "Total votes") +
+  scale_fill_manual(values = c("#98b02c", "#4b4c61", "#4b5439", "black", "#b5773a", "#6a3b7d")) +
   theme_classic() +
   theme(legend.position = "none",
-        axis.title.x = element_blank()) +
-  scale_fill_manual(values = c("#CB9173", "#b5773a", "black", "#4b5439", "#4b4c61", "#798c23"))
+        axis.title.x = element_blank(),
+        axis.text.y = element_text(colour = "black", family = "Playfair Display Black", size = 15),
+        axis.text.x = element_text(colour = "black", family = "Playfair Display Black", size = 18),
+        axis.title = element_text(colour = "black", family = "Playfair Display Black", size = 20))
   
 bars <- ggplot2::ggplotGrob(bars)
 
+#Create a blank canvas and add the bar graph and png legend
 ggplot()+
   scale_x_continuous(limits = c(0, 1.25), expand = c(0, 0)) +
   scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
-  labs(title = "Who is New Zealands favourite bird?", caption = "Plot: @ldbailey255 | Data: dragonfly.co.nz") +
+  labs(title = "Who is New Zealand's favourite bird?",
+       subtitle = "The <span style = color:#4b4c61> Yellow-eyed Penguin </span> (or Hoiho) beat the  <span style = color:#98b02c> Kakapo </span> to be voted NZ Bird of the Year.<br>
+       Colours show the proportion of first-choice votes from other species <br> assigned to the two finalists following the instant run-off.",
+       caption = "Plot: @ldbailey255 | Data: dragonfly.co.nz") +
   annotation_custom(grob = bars, xmin = 0, xmax = 0.95, ymin = 0, ymax = 1) +
   egg::geom_custom(data = bird_legend, aes(x = x, y = y, data = grob), grob_fun = "identity") +
-  geom_text(data = bird_legend, aes(x = x + 0.15, y = y, label = text), size = 7, family = "Ubuntu") +
+  ggtext::geom_richtext(data = bird_legend, aes(x = x + 0.15, y = y, label = text), size = 7, family = "Playfair Display Black") +
   theme_classic() +
   theme(axis.line = element_blank(),
         axis.text = element_blank(),
         axis.title = element_blank(),
         axis.ticks = element_blank(),
-        plot.title = element_text(hjust = 0.5))
+        plot.title = element_text(hjust = 0.5, family = "Playfair Display Black", size = 30),
+        plot.subtitle = element_markdown(hjust = 0.5, family = "Playfair Display Black", size = 20),
+        plot.caption = element_text(family = "Playfair Display Black", size = 12))
 
+#Save
 ggplot2::ggsave(filename = "../plots/Week47_2019.png", height = 10, width = 12, dpi = 300, type = "cairo")
 
 ```
