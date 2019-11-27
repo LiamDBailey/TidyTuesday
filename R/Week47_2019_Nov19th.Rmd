@@ -18,6 +18,9 @@ library(dplyr)
 library(grid)
 library(png)
 library(ggtext)
+library(ggraph)
+
+devtools::load_all()
 
 ```
 
@@ -33,7 +36,9 @@ We have two ideas:
 
 1. Show the top two birds and the distribution of their votes that came from preference flow from other birds.
 
-2. Create an animation to how the real time spread of votes over time.
+2. Network diagram to show how voter preferences combine.
+
+3. Create an animation to how the real time spread of votes over time.
 
 # Idea 1:
 
@@ -47,12 +52,14 @@ nr_unique <- length(which(nz_bird$vote_rank == "vote_5"))
 voterID  <- rep(1:nr_unique, 5)
 voterID  <- voterID[order(voterID)]
 
-nz_birds_processed <- nz_bird %>% 
+nz_bird <- nz_bird %>% 
   dplyr::mutate(voterID = {{voterID}},
                 bird_breed = iconv(bird_breed, "UTF-8")) %>% 
-  dplyr::filter(!is.na(bird_breed)) %>% 
-  #For every unique voter, create a list of their votes
-  #and assign their first vote and current vote (which will identical before runoff)
+  dplyr::filter(!is.na(bird_breed))
+
+#For every unique voter, create a list of their votes
+#and assign their first vote and current vote (which will identical before runoff)
+nz_birds_processed <- nz_bird %>% 
   dplyr::group_by(voterID) %>% 
   dplyr::summarise(votes = list(bird_breed),
                    first_vote = first(bird_breed),
@@ -224,5 +231,60 @@ ggplot()+
 
 #Save
 ggplot2::ggsave(filename = "../plots/Week47_2019.png", height = 10, width = 12, dpi = 300, type = "cairo")
+
+```
+
+# Idea 2: Network diagram
+
+First we need to convert our data to be in the correct format, where we should have a 'from' and 'to' column. Link only first votes with all additional votes.
+
+```{r}
+
+nz_bird_network <- top2_runoff %>% 
+  dplyr::rename(from = first_vote,
+                to = current_vote) %>% 
+  dplyr::select(from, to, voterID)
+
+```
+
+```{r}
+
+nz_bird_network <- nz_bird %>% 
+  dplyr::group_by(voterID) %>% 
+  dplyr::arrange(vote_rank, .by_group = TRUE) %>% 
+  dplyr::mutate(from = first(bird_breed),
+                to = bird_breed) %>% 
+  dplyr::filter(!is.na(to) & from != to) %>% 
+  dplyr::select(from, to, voterID) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(isparrot = dplyr::case_when(from %in% c("Kakapo", "Kea", "Kaka") ~ "IsParrot",
+                                            !from %in% c("Kakapo", "Kea", "Kaka") ~ "IsNotParrot"))
+
+```
+
+Test graph
+
+```{r}
+
+test_data <- nz_bird_network %>% 
+  dplyr::filter(voterID < 100)
+
+graph <- tidygraph::as_tbl_graph(test_data) %>% 
+  dplyr::mutate(Winners = tidygraph::centrality_degree(mode = 'in'))
+
+ggraph(graph, layout = 'kk') + 
+    geom_edge_link(aes(alpha = stat(index)), show.legend = FALSE) +
+    geom_node_point(aes(size = Winners)) + 
+    theme_graph(foreground = 'steelblue', fg_text_colour = 'white')
+
+```
+
+```{r}
+
+ggraph(graph, "focus", focus = node_is_center()) +
+  ggforce::geom_circle(aes(x0 = 0, yo = 0, r = r, data.frame(r = 1:5), colour = "grey")) +
+  geom_edge_link() +
+  geom_node_point() +
+  coord_fixed()
 
 ```
