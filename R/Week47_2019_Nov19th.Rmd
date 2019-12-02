@@ -268,9 +268,17 @@ Test graph
 
 ```{r}
 
-test_data <- nz_bird_network
+test_data <- nz_bird_network %>% 
+  dplyr::filter(voterID < 100)
 
 graph <- tidygraph::as_tbl_graph(test_data) %>% 
+  #Remove cases where there are redundant edges (i.e. the same link occurs multiple times)
+  tidygraph::activate(edges) %>% 
+  filter(!tidygraph::edge_is_multiple()) %>% 
+  #Order nodes to minimise distances
+  tidygraph::activate(nodes) %>% 
+  dplyr::mutate(n_rank = tidygraph::node_rank_traveller()) %>% 
+  dplyr::arrange(n_rank) %>% 
   dplyr::mutate(Winners = tidygraph::centrality_degree(mode = 'in'),
                 bird_grp = dplyr::case_when(
                   grepl(pattern = "Penguin|penguin", x = name) ~ "Penguins",
@@ -286,10 +294,10 @@ graph <- tidygraph::as_tbl_graph(test_data) %>%
                   grepl(pattern = "Cuckoo", x = name) ~ "Cuckoos"))
 
 
-ggraph(graph, layout = 'kk') + 
-    geom_edge_link(aes(alpha = stat(index),
-                       colour = withingrp)) +
+ggraph(graph, layout = 'fr') + 
+    geom_edge_link(aes(colour = withingrp)) +
     geom_node_point(aes(size = Winners, colour = bird_grp)) + 
+    scale_size_area(max_size = 10) +
     theme_graph(foreground = 'steelblue', fg_text_colour = 'white')
 
 ```
