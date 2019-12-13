@@ -298,7 +298,8 @@ ggraph(graph, layout = 'fr') +
     geom_edge_link(aes(colour = withingrp)) +
     geom_node_point(aes(size = Winners, colour = bird_grp)) + 
     scale_size_area(max_size = 10) +
-    theme_graph(foreground = 'steelblue', fg_text_colour = 'white')
+    theme_graph(foreground = 'steelblue', fg_text_colour = 'white') +
+    labs(title = "A network of bird voters")
 
 ```
 
