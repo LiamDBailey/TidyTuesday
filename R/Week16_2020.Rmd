@@ -1,0 +1,104 @@
+---
+title: "Week16_2020"
+author: "Liam D. Bailey"
+date: "17/04/2020"
+output: html_document
+---
+
+```{r}
+
+TT_data <- tidytuesdayR::tt_load(2020, week = 16)
+
+polls <- TT_data$polls
+rankings <- TT_data$rankings
+
+#Look at data
+skimr::skim(polls)
+skimr::skim(rankings)
+
+#critic_country2 is essentially unused and can be removed (>99% missing)
+polls_clean <- polls %>% 
+  dplyr::select(-critic_country2)
+
+#Load images
+sugarhill <- grid::rasterGrob(png::readPNG(source = system.file("extdata", "rap_albums/sugarhill_gang.png",
+                                                                package = "TidyTuesday", mustWork = TRUE)))
+Biggie <- grid::rasterGrob(png::readPNG(source = system.file("extdata", "rap_albums/BIG.png",
+                                                                package = "TidyTuesday", mustWork = TRUE)))
+Tupac <- grid::rasterGrob(png::readPNG(source = system.file("extdata", "rap_albums/2pac.png",
+                                                                package = "TidyTuesday", mustWork = TRUE)))
+Infamous <- grid::rasterGrob(png::readPNG(source = system.file("extdata", "rap_albums/Infamous.png",
+                                                                package = "TidyTuesday", mustWork = TRUE)))
+advisory_sticker <- grid::rasterGrob(png::readPNG(source = system.file("extdata", "rap_albums/parental_advisory.png",
+                                                                       package = "TidyTuesday", mustWork = TRUE)))
+
+##Plot 1: Create a plot of best year for rap music
+plot1_data <- polls_clean %>% 
+  dplyr::mutate(points = dplyr::case_when(rank == 1 ~ 10L,
+                                          rank == 2 ~ 8L,
+                                          rank == 3 ~ 6L,
+                                          rank == 4 ~ 4L,
+                                          rank == 5 ~ 2L)) %>% 
+  dplyr::group_by(year) %>% 
+  dplyr::summarise(total_points = sum(points)) %>% 
+  dplyr::right_join(tibble(year = seq(min(.$year), max(.$year), 1)), by = "year") %>% 
+  dplyr::mutate(total_points = tidyr::replace_na(total_points, 0))
+
+plot1 <- ggplot()+
+  geom_col(data = plot1_data, aes(x = year, y = total_points),
+           colour = "black", fill = "#F13030", alpha = 0.75) +
+  #Sugarhill Gang
+  geom_curve(aes(x = 1975, xend = 1977.5, y = 135, yend = 30), curvature = 0.5,
+             arrow = arrow(length = unit(5, "mm")), colour = "white", size = 1) +
+  ggtext::geom_richtext(aes(x = 1982, y = 175,
+                label = "1979<br> Sugarhill Gang release 'Rappers Delight' <br> the earliest song in this poll"),
+            colour = "white", fill = "black", family = "STEAK", size = 6) +
+  annotation_custom(grob = sugarhill, xmin = 1984, xmax = 1988, ymin = 185, ymax = 235) +
+  #Biggie Smalls
+  geom_curve(aes(x = 1987, xend = 1992.5, y = 325, yend = 265), curvature = -0.3,
+             arrow = arrow(length = unit(5, "mm")), colour = "white", size = 1) +
+  ggtext::geom_richtext(aes(x = 1982.5, y = 325,
+                            label = "1994<br> 'Ready to die' by The Notorious B.I.G. <br>
+                            with the critics top track 'Juicy'"),
+            colour = "white", fill = "black", family = "STEAK", size = 6) +
+  annotation_custom(grob = Biggie, xmin = 1977, xmax = 1981, ymin = 340, ymax = 390) +
+  #2Pac
+  geom_curve(aes(x = 2001.5, xend = 1995, y = 350, yend = 315), curvature = 0.3,
+             arrow = arrow(length = unit(5, "mm")), colour = "white", size = 1) +
+  ggtext::geom_richtext(aes(x = 2014, y = 360,
+                label = "1995<br> 2Pac's magnum opus 'Me Against the World'"),
+            colour = "white", fill = NA, family = "STEAK", size = 6) +
+  ggtext::geom_richtext(aes(x = 2016, y = 310,
+                            label = "1995<br> 'The Infamous' by Mobb Deep <br>
+                            with the 3rd best rated track 'Shook Ones (Part II)'"),
+                        colour = "white", fill = NA, family = "STEAK", size = 6) +
+  annotation_custom(grob = Tupac, xmin = 2000, xmax = 2004, ymin = 325, ymax = 375) +
+  annotation_custom(grob = Infamous, xmin = 2001, xmax = 2005, ymin = 275, ymax = 325) +
+  #Advisory sticker
+  annotation_custom(grob = advisory_sticker, xmin = 2005, xmax = 2020, ymin = 125, ymax = 275) +
+  #Beautifying
+  scale_x_continuous(limits = c(1975, 2025), breaks = seq(1980, 2020, 5), name = "Year") +
+  scale_y_continuous(limits = c(0, 425), name = "Total points", expand = c(0, 0)) +
+  labs(title = "The 90s - The Golden Age of Rap Music",
+       subtitle = "Votes from 100 critics, artists and music industry folks",
+       caption = "Plot: @ldbailey255 | Data: BBC Music") +
+  theme_classic() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(family = "STEAK", colour = "white", size = 16),
+        axis.title.y = element_text(family = "aaaiight! fat", colour = "white", size = 18, vjust = 0),
+        axis.title.x = element_text(family = "aaaiight! fat", colour = "white", size = 18, vjust = 0.5),
+        plot.title = element_text(family = "aaaiight! fat", colour = "white", size = 24, hjust = 0.5),
+        plot.subtitle = element_text(family = "aaaiight! fat", colour = "white", size = 20, hjust = 0.5),
+        plot.caption = element_text(family = "aaaiight! fat", colour = "white", size = 12),
+        plot.background = element_rect(fill = "black"),
+        panel.background = element_rect(fill = "black"),
+        plot.margin = margin(50, 50, 50, 50))
+
+```
+
+```{r}
+
+ggsave(filename = "../plots/2020/Week16/2020_wk16_plot1.png", width = 17, height = 10.5, dpi = 600, type = "cairo")
+
+```
