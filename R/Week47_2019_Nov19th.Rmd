@@ -240,25 +240,27 @@ First we need to convert our data to be in the correct format, where we should h
 
 ```{r}
 
-nz_bird_network <- top2_runoff %>% 
-  dplyr::rename(from = first_vote,
-                to = current_vote) %>% 
-  dplyr::select(from, to, voterID)
-
-```
-
-```{r}
-
 nz_bird_network <- nz_bird %>% 
+  dplyr::mutate(bird_grp = dplyr::case_when(
+                  grepl(pattern = "Penguin|penguin", x = bird_breed) ~ "Penguins",
+                  grepl(pattern = "Kiwi", x = bird_breed) ~ "Kiwis",
+                  grepl(pattern = "Albatross|Petrel|Shearwater|Gannet|Skua|Shag|Gull|Tern|Mollymawk", x = bird_breed) ~ "Seabirds",
+                  grepl(pattern = "Dotterel|Stilt|Plover|Godwit|Oystercatcher|Wrybill", x = bird_breed) ~ "Shorebirds",
+                  grepl(pattern = "Kākā|Kākāpō|Kea|Parakeet", x = bird_breed) ~ "Parrots",
+                  grepl(pattern = "Harrier|Falcon|Owl|Morepork", x = bird_breed) ~ "Birds of Prey",
+                  grepl(pattern = "Crake|Spoonbill|Heron|Bittern|Takahē|Weka|Pūkeko", x = bird_breed) ~ "Waders",
+                  grepl(pattern = "Robin|Silvereye|Wren|Fantail|Warbler|Saddelback|Kōkako|Tūī|Bellbird|Tomtit|Mōhua|Rifleman|Stitchbird|Swallow|Fernbird|", x = bird_breed) ~ "Passerines",
+                  grepl(pattern = "Teal|Duck|Dabchick", x = bird_breed) ~ "Water birds",
+                  grepl(pattern = "Kererū", x = bird_breed) ~ "Pigeons",
+                  grepl(pattern = "Cuckoo", x = bird_breed) ~ "Cuckoos")) %>%
   dplyr::group_by(voterID) %>% 
   dplyr::arrange(vote_rank, .by_group = TRUE) %>% 
-  dplyr::mutate(from = first(bird_breed),
-                to = bird_breed) %>% 
+  dplyr::mutate(from = first(bird_breed), from_grp = first(bird_grp),
+                to = bird_breed, to_grp = bird_grp,
+                withingrp = from_grp == to_grp) %>% 
   dplyr::filter(!is.na(to) & from != to) %>% 
-  dplyr::select(from, to, voterID) %>% 
-  dplyr::ungroup() %>% 
-  dplyr::mutate(isparrot = dplyr::case_when(from %in% c("Kakapo", "Kea", "Kaka") ~ "IsParrot",
-                                            !from %in% c("Kakapo", "Kea", "Kaka") ~ "IsNotParrot"))
+  dplyr::select(from, to, withingrp, voterID) %>% 
+  dplyr::ungroup()
 
 ```
 
@@ -270,11 +272,32 @@ test_data <- nz_bird_network %>%
   dplyr::filter(voterID < 100)
 
 graph <- tidygraph::as_tbl_graph(test_data) %>% 
-  dplyr::mutate(Winners = tidygraph::centrality_degree(mode = 'in'))
+  #Remove cases where there are redundant edges (i.e. the same link occurs multiple times)
+  tidygraph::activate(edges) %>% 
+  filter(!tidygraph::edge_is_multiple()) %>% 
+  #Order nodes to minimise distances
+  tidygraph::activate(nodes) %>% 
+  dplyr::mutate(n_rank = tidygraph::node_rank_traveller()) %>% 
+  dplyr::arrange(n_rank) %>% 
+  dplyr::mutate(Winners = tidygraph::centrality_degree(mode = 'in'),
+                bird_grp = dplyr::case_when(
+                  grepl(pattern = "Penguin|penguin", x = name) ~ "Penguins",
+                  grepl(pattern = "Kiwi", x = name) ~ "Kiwis",
+                  grepl(pattern = "Albatross|Petrel|Shearwater|Gannet|Skua|Shag|Gull|Tern|Mollymawk", x = name) ~ "Seabirds",
+                  grepl(pattern = "Dotterel|Stilt|Plover|Godwit|Oystercatcher|Wrybill", x = name) ~ "Shorebirds",
+                  grepl(pattern = "Kākā|Kākāpō|Kea|Parakeet", x = name) ~ "Parrots",
+                  grepl(pattern = "Harrier|Falcon|Owl|Morepork", x = name) ~ "Birds of Prey",
+                  grepl(pattern = "Crake|Spoonbill|Heron|Bittern|Takahē|Weka|Pūkeko", x = name) ~ "Waders",
+                  grepl(pattern = "Robin|Silvereye|Wren|Fantail|Warbler|Saddelback|Kōkako|Tūī|Bellbird|Tomtit|Mōhua|Rifleman|Stitchbird|Swallow|Fernbird|", x = name) ~ "Passerines",
+                  grepl(pattern = "Teal|Duck|Dabchick", x = name) ~ "Water birds",
+                  grepl(pattern = "Kererū", x = name) ~ "Pigeons",
+                  grepl(pattern = "Cuckoo", x = name) ~ "Cuckoos"))
 
-ggraph(graph, layout = 'kk') + 
-    geom_edge_link(aes(alpha = stat(index)), show.legend = FALSE) +
-    geom_node_point(aes(size = Winners)) + 
+
+ggraph(graph, layout = 'fr') + 
+    geom_edge_link(aes(colour = withingrp)) +
+    geom_node_point(aes(size = Winners, colour = bird_grp)) + 
+    scale_size_area(max_size = 10) +
     theme_graph(foreground = 'steelblue', fg_text_colour = 'white')
 
 ```
