@@ -1,0 +1,500 @@
+---
+title: "plotting_tricks"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{plotting_examples}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Fonts
+
+## showtext
+
+**Note:** If you want to render in RMarkdown, you need `fig.showtext` in the block options.
+
+```{r, eval = FALSE, fig.showtext = TRUE, fig.height = 7, fig.width = 7}
+
+#Use the package showtext which allows custom fonts to be used
+  library(showtext)
+  
+  #Load a font from Google Fonts
+  sysfonts::font_add_google("Alice", "Alice")
+  
+  #Load a font installed on my system
+  #'regular' is the location of the .ttf/.ttc/.otf font file for the regular face (i.e. no bold/italic)
+  #If you're unsure about the file path use sysfonts::font_paths()
+  #Similarly, you can specify italic, bold etc. If unspecified, all fontfaces will just be identical.
+  #'family' is a custom name for this group of loaded fonts 
+  sysfonts::font_add(family = "My_Ubuntu",
+                     regular = 'C:/Windows/Fonts/Ubuntu-R.ttf',
+                     italic = 'C:/Windows/Fonts/Ubuntu-RI.ttf',
+                     bold = 'C:/Windows/Fonts/Ubuntu-B.ttf',
+                     bolditalic = 'C:/Windows/Fonts/Ubuntu-BI.ttf')
+  
+  #Specify that the showtext package should be used
+  #for rendering text
+  showtext_auto()
+  
+  #Create a plot
+  #Note: These will not display in RStudio, need to use x11()
+  #to view it.
+  test_plot <- ggplot() +
+    geom_point(data = iris, aes(x = Sepal.Length, Sepal.Width)) +
+    labs(title = "Here's some information about plants...") +
+    theme_classic() +
+    #Note: It seems the way that the size argument is read when using showtext is different
+    #to when using extrafont. Specification is much more like what you would expect in a .docx or .ppt
+    theme(plot.title = element_text(family = "My_Ubuntu", face = "bold", size = 30),
+          axis.title = element_text(family = "Alice", size = 20),
+          axis.text = element_text(family = "My_Ubuntu", face = "bold.italic", size = 15))
+  
+  test_plot
+
+```
+
+# Images
+
+We will often want to add images into figures. This can be done multiple ways.
+
+## PNG files
+
+### Reading PNG files
+
+png::readPNG will convert a PNG into R as a raster array.
+
+```{r}
+
+png_array <- png::readPNG(source = system.file("extdata/iris", "setosa.png", package = "TidyTuesday", mustWork = TRUE))
+
+```
+
+You can convert this array into a grob for using in plots with grid::rasterGrob
+
+```{r}
+
+#Use width and height to explicitly define the size of the image
+#These measurements can be useful to define the size of images in relation to the size of
+#the plotting area
+png_grob <- grid::rasterGrob(png_array, width = unit(1.5, "cm"), height = unit(2.5, "cm"))
+
+```
+
+## annotate_custom
+
+We can add a single grob in a ggplot using `annotate_custom`
+
+```{r, fig.height=5, fig.width=5}
+
+ggplot()+
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  #annotation_custom expects the grob to fill the entire viewport defined by xmin, xmax, ymin, ymax. Grobs with a different (absolute) size will be center-justified in that region.
+  annotation_custom(grob = png_grob,
+                    xmin = 0.25, xmax = 1,
+                    ymin = 0, ymax = 0.75)
+
+```
+
+```{r, fig.height=5, fig.width=5}
+
+ggplot()+
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  #We can use Inf (default) to place the grob at the centre of the plot
+  annotation_custom(grob = png_grob,
+                    xmin = -Inf, xmax = Inf,
+                    ymin = -Inf, ymax = Inf)
+
+```
+
+```{r, fig.height=5, fig.width=5}
+
+#We can also use just arguments in rasterGrob to align our png 
+png_grob_left <- grid::rasterGrob(png_array, width = unit(1.5, "cm"), height = unit(2.5, "cm"),
+                                  just = c(1, 0.5))
+png_grob_top <- grid::rasterGrob(png_array, width = unit(1.5, "cm"), height = unit(2.5, "cm"),
+                                   just = c(0.5, 0))
+
+ggplot()+
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  #We can use Inf (default) to place the grob at the centre of the plot
+  annotation_custom(grob = png_grob_left,
+                    xmin = -Inf, xmax = Inf,
+                    ymin = -Inf, ymax = Inf) +
+  annotation_custom(grob = png_grob_top,
+                    xmin = -Inf, xmax = Inf,
+                    ymin = -Inf, ymax = Inf)
+
+```
+
+## egg::geom_custom
+
+annotate_custom expects a grob object; however, we might also have other useful information associated with a png (e.g. facet location). In this case, we can use egg::geom_custom which expects a data frame with a grob column.
+
+```{r}
+
+setosa_png <- png::readPNG(source = system.file("extdata/iris", "setosa.png", package = "TidyTuesday", mustWork = TRUE))
+setosa_grob <- grid::rasterGrob(setosa_png, width = unit(0.3, "npc"), height = unit(0.3, "npc"))
+
+virginica_png <- png::readPNG(source = system.file("extdata/iris", "virginica.png", package = "TidyTuesday", mustWork = TRUE))
+virginica_grob <- grid::rasterGrob(virginica_png, width = unit(0.3, "npc"), height = unit(0.3, "npc"))
+
+versicolor_png <- png::readPNG(source = system.file("extdata/iris", "versicolor.png", package = "TidyTuesday", mustWork = TRUE))
+versicolor_grob <- grid::rasterGrob(versicolor_png, width = unit(0.3, "npc"), height = unit(0.3, "npc"))
+
+#Create a data frame to specify which facet each image should appear in
+iris_images <- tibble(x = rep(7.25, 3),
+                      y = rep(4.0, 3),
+                      Species = c("setosa", "virginica", "versicolor")) %>% 
+  dplyr::mutate(grob = list(setosa_grob, virginica_grob, versicolor_grob))
+
+#Create a facet and include egg::geom_custom
+ggplot() +
+  geom_point(data = iris, aes(x = Sepal.Length, y = Sepal.Width, fill = Species), shape = 21) +
+  facet_wrap(facets = ~Species) +
+  egg::geom_custom(data = iris_images,
+                   aes(x = x, y = y, data = grob), grob_fun = "identity")
+
+```
+
+# Density plots
+
+There is always a problem using scatterplots for large data sets, because the individuals points overlap and cannot be distinguished.
+
+```{r, fig.height = 7, fig.width = 7}
+
+#Create some dummy data
+dummy_data <- tibble::tibble(x = rnorm(n = 10000, mean = 0, sd = 3),
+                             y = rnorm(n = 10000, mean = 0, sd = 3))
+
+#Plot regular scatterplot
+ggplot(data = dummy_data) +
+  geom_point(aes(x = x, y = y)) +
+  theme_classic()
+
+```
+
+One common alternative is to jitter or dodge, but this can be misleading, suggesting that values are different to what is actually measured.
+
+An alternative is to use density plots or bin the data.
+
+```{r, fig.width = 14, fig.height = 7}
+
+plot1 <- ggplot(data = dummy_data) +
+  stat_density2d(aes(x = x, y = y, fill = stat(level)), geom = "polygon") +
+  scale_fill_viridis_c()
+
+plot2 <- ggplot(data = dummy_data) +
+  stat_bin2d(aes(x = x, y = y)) +
+  scale_fill_viridis_c()
+
+cowplot::plot_grid(plot1, plot2, nrow = 1)
+
+```
+
+These plots are useful, but may not be helpful if you want to still be able to see individual points (e.g. outliers). Therefore, the addon package ggpointdensity provides an alternative. In this case, the points are displayed, but they are coloured based on the number of neighbours.
+
+```{r, fig.width = 7, fig.height = 7}
+
+#Install package
+library(ggpointdensity)
+
+point_density_plot <- ggplot(data = dummy_data) +
+  ggpointdensity::geom_pointdensity(aes(x = x, y = y)) +
+  #Note: It uses the aesthetic 'colour' of points.
+  #This doesn't seem to be adjustable. Therefore, you can't change to e.g. point 21.
+  scale_colour_viridis_c()
+
+point_density_plot
+
+```
+
+The `adjust` argument allows the threshold for neighbours to be changed (where lower counts closer neighbours)
+
+```{r, fig.width = 14, fig.height = 7}
+
+#Install package
+library(ggpointdensity)
+
+close_neighbours <- ggplot(data = dummy_data) +
+  ggpointdensity::geom_pointdensity(aes(x = x, y = y), adjust = 0.01) +
+  scale_colour_viridis_c() +
+  labs(title = "Close neighbours")
+
+far_neighbours <- ggplot(data = dummy_data) +
+  ggpointdensity::geom_pointdensity(aes(x = x, y = y), adjust = 10) +
+  scale_colour_viridis_c() +
+  labs(title = "Far neighbours")
+
+cowplot::plot_grid(close_neighbours, far_neighbours, nrow = 1)
+
+```
+
+# Colour palettes
+
+There are a huge number of good colour palettes that can be used in R, or you can create one manually. Here I'll just highlight some of the options that integrate with ggplot.
+
+## Colour brewer
+
+These palettes come from http://colorbrewer2.org/. They are particularly well suited for cases where discrete colours are needed, but they can be useful for continuous data as well.
+
+Values for the `type` and `palette` argument can be found on the website.
+
+```{r, fig.width = 14, fig.height = 7}
+
+#Install package
+library(ggpointdensity)
+
+continuous_brew <- ggplot(data = dummy_data) +
+  ggpointdensity::geom_pointdensity(aes(x = x, y = y)) +
+  #For continuous data, you use scale_colour_distiller
+  scale_colour_distiller(type = "seq", palette = "Greens", direction = -1)
+
+SEA_data <- map_data("world") %>%
+  dplyr::filter(region %in% c("Cambodia", "Malayisa", "Vietnam", "Laos", "Thailand"))
+
+discrete_brew <- ggplot() +
+  geom_polygon(data = SEA_data, aes(x = long, y = lat, group = group, fill = region), colour = "black") +
+  #For discrete data, you use scale_colour_brewer
+  scale_fill_brewer(type = "qual", palette = "Dark2") +
+  coord_cartesian()
+
+cowplot::plot_grid(continuous_brew, discrete_brew, nrow = 1)
+
+```
+
+## CARTO colours
+
+As with colour brewer, these are generally designed for maps https://carto.com/carto-colors/, but have other purposes.
+
+```{r, fig.width = 14, fig.height = 7}
+
+#Install package
+library(rcartocolor)
+
+continuous_carto <- ggplot(data = dummy_data) +
+  ggpointdensity::geom_pointdensity(aes(x = x, y = y)) +
+  #Continuous scale uses _c suffix
+  #Note that 'quantitative' is the same as 'sequential' on their website
+  rcartocolor::scale_color_carto_c(type = "quantitative", palette = "BluYl", direction = -1)
+
+SEA_data <- map_data("world") %>%
+  dplyr::filter(region %in% c("Cambodia", "Malayisa", "Vietnam", "Laos", "Thailand"))
+
+discrete_carto <- ggplot() +
+  geom_polygon(data = SEA_data, aes(x = long, y = lat, group = group, fill = region), colour = "black") +
+  #Discrete uses _d suffix
+  rcartocolor::scale_fill_carto_d(type = "qualitative", palette = "Bold") +
+  coord_cartesian()
+
+cowplot::plot_grid(continuous_carto, discrete_carto, nrow = 1)
+
+```
+
+# Web scraping
+
+Web scraping is obviously a super powerful tool. There are a few examples of webscraping that can be useful for working with/plotting data.
+
+## Google API
+
+The package ggmap has a number of features that interface with the Google API and can be really useful for making maps.
+
+All these features require Google API credentials, which can be found here https://developers.google.com/maps/documentation/maps-static/get-api-key
+
+One really useful feature is the `mutate_geocode` function, which turns a character string location into lat/long coordinates
+
+**Note:** This can be used for ANYTHING you could search on Google Maps (e.g. restaurants, street addresses)
+
+```{r, fig.height = 7, fig.width = 7}
+
+#Create dummy_data
+SEA_Capitals <- tibble::tibble(city = c("Hanoi, Vietnam", "Bangkok, Thailand", "Phnom Phen, Cambodia", "Vientien, Laos"))
+
+#Register Google API for this session to use Google Maps
+#if no API is currently available
+if(!ggmap::has_google_key()){
+
+  ggmap::register_google(key = readline("Enter your Google API:"))
+
+}
+
+#Use mutate_geocode to get lat/long
+SEA_Capitals <- SEA_Capitals %>%
+  #This will add lat/long and address information for each column
+  ggmap::mutate_geocode(city, output = "more")
+
+#Plot capitals with country borders
+SEA_data <- map_data("world") %>%
+  dplyr::filter(region %in% c("Cambodia", "Malayisa", "Vietnam", "Laos", "Thailand"))
+
+discrete_carto <- ggplot() +
+  geom_polygon(data = SEA_data, aes(x = long, y = lat, group = group, fill = region), colour = "black") +
+  #Discrete uses _d suffix
+  rcartocolor::scale_fill_carto_d(type = "qualitative", palette = "Bold") +
+  geom_point(data = SEA_Capitals, aes(x = lon, y = lat), size = 4, shape = 21) +
+  geom_text(data = SEA_Capitals, aes(x = lon + 1, y = lat + 0.5, label = city), size = 5) +
+  coord_cartesian()
+
+discrete_carto
+
+```
+
+## Scrape currency or stock data
+
+Just like we can scrape Google Maps locations, we can also scrape exchange rate and stock data from Yahoo using the package quantmod.
+
+We can get all data for a given stock using the `getSymbols` function.
+
+```{r}
+
+#This loads all stock data for commbank on the ASX (taken from Yahoo)
+#We specify no auto-assignment, otherwise it loads into the global env
+CommBank <- getSymbols("CBA.AX", src = "yahoo", auto.assign = FALSE)
+
+#This object is a unique object type (xts)
+#We need to convert to a dataframe to work with it using pipe or regular indexing etc.
+CommBank_tbl <- CommBank %>% 
+  as.data.frame() %>% 
+  #The rownames are the dates
+  tibble::rownames_to_column(var = "date") %>% 
+  dplyr::mutate(date = as.Date(date))
+
+ggplot(data = CommBank_tbl) +
+  geom_area(aes(x = date, y = CBA.AX.Open), fill = "red") +
+  theme_classic()
+
+```
+
+We can get currency exchange data by use the code "AAABBB=X", where AAA and BBB are 3 letter currency codes. For example, we could look at USD/AUD exchange rate over time with the same approach
+
+```{r}
+
+Xchange <- getSymbols("USDAUD=X", src = "yahoo", auto.assign = FALSE)
+
+Xchange_tbl <- Xchange %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column(var = "date") %>% 
+  dplyr::mutate(date = as.Date(date))
+
+ggplot(data = Xchange_tbl) +
+  geom_area(aes(x = date, y = `USDAUD=X.Open`), fill = "red") +
+  theme_classic()
+
+```
+
+If we want the value of a stock/currency at a single point, we use `getQuote` instead. This can be useful to convert multiple currencies in a dataset to a standard currency.
+
+```{r}
+
+getQuote("USDAUD=X", src = "yahoo")
+
+```
+
+# Text analysis
+
+Using text analysis for a 'text' or 'comments' column can provide an additional analysis option for certain datasets.
+
+We'll use the horror movie data used in TidyTuesday (22/10/2019) as it has a description of each movie.
+
+## Step 1: Create a corpus.
+
+A corpus is a format for storing text data for analysis that contains meta-data information about a given character string. This can be created with the `tm` package.
+
+```{r}
+
+library(tm)
+
+#Load horror movie data
+horror_movies <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-10-22/horror_movies.csv")
+
+#Create corpus for horror movie descriptions. Specify the descriptions are in English.
+horror_corpus <- tm::SimpleCorpus(x = VectorSource(horror_movies$plot), control = list(language = "en"))
+
+#For each movie, we now have a corpus with the text still stored as the content
+horror_corpus[[1]]$content
+
+```
+
+## Step 2: Format all text for analysis
+
+A lot of text is meaningless for any text analysis (e.g. white space, punctuation). Particularly 'stop words' that are basically words that don't add anything to the sentiment (e.g. pronouns). For most text analysis we will want to clean the text of these things.
+
+```{r}
+
+horror_corpus_clean <- horror_corpus %>% 
+  #Remove excess white space
+  tm::tm_map(stripWhitespace) %>%
+  #Make everything lowercase
+  tm::tm_map(content_transformer(tolower)) %>% 
+  #Remove numbers and punctuation
+  tm::tm_map(removeNumbers) %>%
+  tm::tm_map(removePunctuation) %>%
+  #Remove stop words
+  tm::tm_map(removeWords, stopwords("english"))
+
+#We can get an idea of what these processes have done
+horror_corpus_clean[[1]]$content
+
+```
+
+## Step 3: Stemming
+
+We can then use the 'Porter Stemming Algorithm' (https://tartarus.org/martin/PorterStemmer/) to reduce words to their basic stems. This ensures that two conjugations of the same word are intrepreted in the same way, which is important for things like sentiment analysis.
+
+```{r}
+
+horror_corpus_stem <- horror_corpus_clean %>% 
+  tm::tm_map(stemDocument)
+
+horror_corpus_stem[[1]]$content
+
+```
+
+For example, you can see that family become 'famili' (as would familial, familiar etc.).
+
+## Step 4: Create a document term matrix
+
+A document-term matrix is essentially a matrix showing the occurence of each word in each corpus (i.e. row of data in our case)
+
+```{r}
+
+horror_document_term_matrix <- tm::DocumentTermMatrix(horror_corpus_stem)
+
+#We use the 'inspect' function to view this object
+tm::inspect(horror_document_term_matrix)
+
+```
+
+## Step 5: Create a word cloud
+
+One way to visualise text data is through a word cloud. This can be done outside of ggplot using the `wordcloud` package.
+
+*Note:* In this case it's probably more reasonable to use non-stemmed words!
+
+```{r}
+
+wordcloud_document_term_matrix <- tm::DocumentTermMatrix(horror_corpus)
+
+wordcloud_data <- as.data.frame(colSums(as.matrix(wordcloud_document_term_matrix))) %>%
+  rownames_to_column()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
