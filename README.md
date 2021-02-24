@@ -22,16 +22,16 @@ Quick Link
 <!-- toc -->
 * **2019**
   - 2019/Week 18 [:bird: Bird collisions](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/30_04_2019.png)
-  - 2019/Week 19 [:man teacher: Student teacher ratios](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/07_05_19.gif)
-  - 2019/Week 20 [:sports medal: Nobel prize winners](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/15_05_19.png)
-  - 2019/Week 37 [:roller coaster: Amusement park injuries](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/10_09_19_detailed.png)
-  - 2019/Week 38 [:camping: US National parks](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/17_09_19.png)
+  - 2019/Week 19 [:raising_hand: Student teacher ratios](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/07_05_19.gif)
+  - 2019/Week 20 [:medal_sports: Nobel prize winners](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/15_05_19.png)
+  - 2019/Week 37 [:roller_coaster: Amusement park injuries](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/10_09_19_detailed.png)
+  - 2019/Week 38 [:tent: US National parks](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/17_09_19.png)
   - 2019/Week 40 [:pizza: New York pizza](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/01_10_19.png)
-  - 2019/Week 41 [:person lifting weights: Powerlifting](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/08_10_19.png)
+  - 2019/Week 41 [:weight_lifting: Powerlifting](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/08_10_19.png)
   - 2019/Week 42 [:car: Car emissions](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/15_10_19_plots/15_10_19.png)
-  - 2019/Week 43 [:film frames: Horror movies](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/22_10_19.png)
-  - 2019/Week 45 [:bicycle: Cycling in the US](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/5_11_2019.png)
-  - 2019/Week 46 [:nerd: R packages](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png)
+  - 2019/Week 43 [:clapper: Horror movies](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/22_10_19.png)
+  - 2019/Week 45 [:bike: Cycling in the US](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/5_11_2019.png)
+  - 2019/Week 46 [:nerd_face: R packages](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png)
   - 2019/Week 47 [:penguin: NZ bird of the year](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week47_2019.png)
 * **2020**
   - 2020/Week 16 [TO DO]()
@@ -52,7 +52,7 @@ Quick Link
 
 ***
 
-### [2019/Week 46](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png) :nerd: R packages
+### [2019/Week 46](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png) :nerd_face: R packages
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png)
 
