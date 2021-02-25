@@ -34,15 +34,21 @@ Quick Link
   - 2019/Week 46 [:nerd_face: R packages](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week46_2019.png)
   - 2019/Week 47 [:penguin: NZ bird of the year](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week47_2019.png)
 * **2020**
-  - 2020/Week 16 [TO DO]()
-  - 2020/Week 46 [TO DO]()
+  - 2020/Week 16 [TO ADD]()
+  - 2020/Week 46 [TO ADD]()
 * **2021**
-  - 2021/Week 9 [TO DO]()
+  - 2021/Week 9 [:dollar: Employment and earning](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week9/2021Week9.png)
 
 <!-- tocstop -->
 
 
 </details>
+
+***
+
+### [2021/Week 9](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week9/2021Week9.png) :dollar: Employment and earning
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week47_2019.png)
 
 ***
 
