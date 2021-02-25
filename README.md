@@ -48,7 +48,7 @@ Quick Link
 
 ### [2021/Week 9](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week9/2021Week9.png) :dollar: Employment and earning
 
-![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/Week47_2019.png)
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week9/2021Week9.png)
 
 ***
 
