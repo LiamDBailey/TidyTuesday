@@ -38,11 +38,18 @@ Quick Link
   - 2020/Week 46 [TO ADD]()
 * **2021**
   - 2021/Week 9 [:dollar: Employment and earning](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week9/2021Week9.png)
+  - 2021/Week 11 [:detective: Bechdel score of Bond movies](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week11/2021Week11.png)
 
 <!-- tocstop -->
 
 
 </details>
+
+***
+
+### [2021/Week 11](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week11/2021Week11.png) :detective: Bechdel score of Bond movies
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2021/Week11/2021Week11.png)
 
 ***
 
