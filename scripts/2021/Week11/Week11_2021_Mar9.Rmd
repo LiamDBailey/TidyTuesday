@@ -1,0 +1,379 @@
+---
+title: "Week11_2021_Mar9"
+author: "Liam D. Bailey"
+date: "09/03/2021"
+output: html_document
+---
+
+Set options
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, fig.showtext = TRUE, fig.retina = 1)
+options(scipen = 200)
+```
+
+Load packages
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(fuzzyjoin)
+
+```
+
+Load TidyTuesday data
+
+```{r}
+
+tuesdata <- tidytuesdayR::tt_load(2021, week = 11)
+
+bechdel <- tuesdata$raw_bechdel
+movies  <- tuesdata$movies
+
+```
+
+Load the Jamee Bond data
+
+```{r}
+
+bond <- read.csv(here::here("./data/james_bond_movies.csv"))
+
+```
+
+Filter out just the james bond movies from the Bechdal test data
+
+```{r}
+
+bond_movies <- bond %>% 
+  fuzzyjoin::stringdist_left_join(bechdel, by = c("Movie" = "title")) %>% 
+  fuzzyjoin::stringdist_left_join(movies, by = c("Movie" = "title"))
+
+#Add in the Living Daylights year so we get the right era block for Dalton
+bond_movies$year.x[bond_movies$Movie == "The Living Daylights"] <- 1987  
+
+bond_movies <- bond_movies %>%   
+  #Remove old Casino Royale movie which is a 'spy parody'
+  dplyr::filter(year.x != "1967") %>% 
+  dplyr::select(title = Movie, year = year.x, Actor, bond_rating = rating)
+
+other_movies <- bechdel %>% 
+  dplyr::left_join(dplyr::select(movies, imdb_id, genre, language), by = "imdb_id") %>% 
+  fuzzyjoin::stringdist_anti_join(bond, by = c("title" = "Movie")) %>%
+  dplyr::filter(year %in% bond_movies$year) %>% 
+  dplyr::group_by(year) %>% 
+  dplyr::summarise(all_movie_rating = mean(rating),
+                   n = n()) %>% 
+  #Create a rolling mean
+  dplyr::mutate(lag1 = lag(all_movie_rating),
+                lead1 = lead(all_movie_rating)) %>% 
+  dplyr::rowwise() %>% 
+  dplyr::mutate(rollingmean_allmovies = mean(c(all_movie_rating, lag1, lead1))) %>% 
+  dplyr::select(-lag1, -lead1)
+
+action_movies <- bechdel %>% 
+  dplyr::left_join(dplyr::select(movies, imdb_id, genre, language), by = "imdb_id") %>% 
+  fuzzyjoin::stringdist_anti_join(bond, by = c("title" = "Movie")) %>% 
+  dplyr::filter(year %in% bond_movies$year & stringr::str_detect(genre, "Action")) %>% 
+  dplyr::group_by(year) %>% 
+  dplyr::summarise(action_movie_rating = mean(rating)) %>% 
+  #Create a rolling mean
+  dplyr::mutate(lag1 = lag(action_movie_rating),
+                lead1 = lead(action_movie_rating)) %>% 
+  dplyr::rowwise() %>% 
+  dplyr::mutate(rollingmean_actionmovies = mean(c(action_movie_rating, lag1, lead1))) %>% 
+  dplyr::select(-lag1, -lead1)
+
+combo_data <- other_movies %>%
+  dplyr::left_join(action_movies, by = "year")
+
+```
+
+Make a basic plot of the data. Just show the rolling mean of all movies and the position of the bond movies in each year
+
+```{r}
+
+ggplot() +
+  geom_path(data = combo_data, aes(x = year, y = rollingmean_allmovies), size = 1, colour = "blue") +
+  geom_path(data = combo_data, aes(x = year, y = rollingmean_actionmovies), size = 1, colour = "red") +
+  geom_point(data = bond_movies, aes(x = year, y = bond_rating), size = 3, shape = 21, fill = "grey50")
+
+```
+
+```{r}
+
+bond_eras <- bond_movies %>% 
+  mutate(era_nr = 1)
+
+for(i in 1:nrow(bond_eras)){
+  
+  if (i == 1) {
+    
+    next()
+    
+  } else if (bond_eras$Actor[i] == bond_eras$Actor[i - 1]) {
+    
+    bond_eras$era_nr[i] <- bond_eras$era_nr[i - 1]
+    
+  } else if (bond_eras$Actor[i] != bond_eras$Actor[i - 1]) {
+    
+    bond_eras$era_nr[i] <- bond_eras$era_nr[i - 1] + 1
+    
+  }
+  
+}
+
+bond_eras_startend <- bond_eras %>% 
+  group_by(era_nr) %>% 
+  summarise(start = first(year),
+            end = last(year),
+            actor = first(Actor))
+
+```
+
+```{r}
+
+ggplot() +
+  #Adjust the location so that movies fall in the middle of a year rather than at the start
+  geom_rect(data = bond_eras_startend, aes(xmin = start, xmax = end + 1, ymin = -Inf, ymax = Inf, fill = as.factor(actor)),
+            colour = NA) +
+  geom_path(data = combo_data, aes(x = year + 0.5, y = rollingmean_allmovies), size = 1, colour = "blue") +
+  geom_point(data = bond_movies, aes(x = year + 0.5, y = bond_rating), size = 3, shape = 21, fill = "grey50") +
+  #Add ? for Living daylights
+  geom_text(aes(x = 1987 + 0.5, y = 2, label = "?*")) +
+  scale_fill_viridis_d(name = "") +
+  scale_x_continuous(breaks = seq(1960, 2020, 5), name = "") +
+  scale_y_continuous(name = "Bechnel rating")
+
+```
+
+This is all good and well, but it's hard to read anything due to the ordinal nature of the data. Determine a mean rating value for each actor instead.
+
+```{r}
+
+bond_era_ratings <- bond_movies %>% 
+  group_by(Actor) %>% 
+  summarise(mean_rating = mean(bond_rating, na.rm = TRUE),
+            middle_yr = (first(year) + last(year))/2)
+
+#Change Connery middle period to be in first era
+bond_era_ratings$middle_yr[bond_era_ratings$Actor == "Sean Connery"] <- 1963.5
+
+ggplot() +
+  #Adjust the location so that movies fall in the middle of a year rather than at the start
+  geom_rect(data = bond_eras_startend, aes(xmin = start, xmax = end + 1, ymin = -Inf, ymax = Inf, fill = as.factor(actor)),
+            colour = NA) +
+  geom_path(data = combo_data, aes(x = year + 0.5, y = rollingmean_allmovies), size = 1, colour = "blue") +
+  geom_point(data = bond_era_ratings, aes(x = middle_yr + 0.5, y = mean_rating), size = 5, shape = 21, fill = "grey50") +
+  #Add * next to Connery and Dalton
+  geom_text(data = filter(bond_era_ratings, Actor %in% c("Sean Connery", "Timothy Dalton")),
+            aes(x = middle_yr + 0.9, y = mean_rating + 0.025, label = c("*", "**"))) +
+  scale_fill_viridis_d(name = "") +
+  scale_x_continuous(breaks = seq(1960, 2020, 5), name = "") +
+  scale_y_continuous(name = "Bechnel rating", limits = c(1, 3))
+
+```
+
+Again fine, but it has a few problems:
+
+a) What to do with years where there were no Bond movies? Can leave blank to show the change over time in all movies but this feels like empty space for our purposes.
+
+b) How to deal with Connery/Lazenby overlap?
+
+Instead, we can make the x-axis time in number of movies (instead of years). We need data which includes:
+- Mean rating of bond movies per bond
+- Start and end year of movie 'run'
+- Start and end of movie 'run' based on position in the bond universe
+- Length of movie run (i.e. number of films)
+- Mean Bechdel test rating for all other movies during this run (including years without any movies)
+
+```{r}
+
+other_movies <- bechdel %>% 
+  dplyr::left_join(dplyr::select(movies, imdb_id, genre, language), by = "imdb_id") %>% 
+  fuzzyjoin::stringdist_anti_join(bond, by = c("title" = "Movie")) %>%
+  dplyr::filter(year %in% bond_movies$year)
+
+bond_order <- data.frame(Actor = c("Sean Connery", "George Lazenby", "Roger Moore", "Timothy Dalton", "Pierce Brosnan", "Daniel Craig")) %>% 
+  mutate(era_nr = 1:n())
+
+bond_era_ratings <- bond_movies %>%
+  left_join(bond_order, by = "Actor") %>% 
+  arrange(era_nr, year) %>% 
+  tibble::rownames_to_column(var = "movie_nr") %>%
+  # mutate(movie_nr = as.integer(movie_nr) * 2) %>% 
+  tidyr::separate(Actor, into = c("given_name", "surname"), sep = " ") %>% 
+  group_by(surname) %>% 
+  summarise(mean_bond_rating = mean(bond_rating, na.rm = TRUE),
+            first_yr = first(year),
+            first_nr = as.integer(first(movie_nr)) - 0.5,
+            last_yr = last(year),
+            last_nr = as.integer(last(movie_nr)) + 0.5,
+            middle_point = mean(c(first_nr, last_nr)),
+            nr_movies = n()) %>% 
+  mutate(mean_movie_rating = purrr::map2_dbl(.x = first_yr, .y = last_yr,
+                                             .f = function(first, last, movie_db){
+                                               
+                                               movie_db_subset <- other_movies %>% 
+                                                 filter(year >= first & year <= last)
+                                               
+                                               mean(movie_db_subset$rating)
+                                               
+                                             }, movie_db = other_movies),
+         year_text = case_when(first_yr == last_yr ~ as.character(first_yr),
+                               TRUE ~ paste(first_yr, last_yr, sep = "-")))
+
+x_labels <- bond_movies %>%
+  left_join(bond_order, by = "Actor") %>% 
+  arrange(era_nr, year) %>% 
+  tibble::rownames_to_column(var = "movie_nr") %>% 
+  mutate(movie_nr = as.integer(movie_nr))
+
+ggplot(data = bond_era_ratings) +
+  geom_rect(aes(xmin = first_nr, xmax = last_nr, ymin = -Inf, ymax = Inf, fill = surname),
+            colour = "black", alpha = 0.5) +
+  geom_segment(aes(x = first_nr + 0.25, xend = last_nr - 0.25, y = mean_movie_rating, yend = mean_movie_rating), size = 1.5) +
+  geom_text(aes(x = middle_point, y = 2.9, label = year_text),
+            size = 7) +
+  geom_point(aes(x = middle_point, y = mean_bond_rating, colour = surname),
+             size = 6, shape = 21, stroke = 2, fill = "grey50") + 
+  geom_text(aes(x = middle_point, y = mean_bond_rating - 0.1, colour = surname,
+                label = surname), size = 10) +
+  geom_text(aes(x = middle_point, y = mean_bond_rating - 0.2, colour = surname,
+                label = round(mean_bond_rating, 2)), size = 10) +
+  scale_x_continuous(breaks = x_labels$movie_nr, labels = x_labels$title) +
+  scale_y_continuous(limits = c(1, 3), breaks = 1:3) +
+  scale_fill_manual(values = c("grey50", "grey50", NA, NA, NA, "grey50"), name = "") +
+  scale_colour_viridis_d(name = "") +
+  labs(x = "", y = "Bechdel score",
+       title = "How problematic is James Bond?",
+       subtitle = "Bechdel test score of Bond movies compared to movies from the same period",
+       caption = "Data: FiveThirtyEight | Plot: @ldbailey255") +
+  coord_cartesian(expand = FALSE) +
+  theme_classic() +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank())
+
+```
+Add the actor images instead of points
+
+```{r}
+
+all_png <- data.frame(file = list.files(here::here("./inst/extdata/bonds"), pattern = ".png", full.names = TRUE)) %>% 
+  mutate(surname = stringr::str_to_title(stringr::str_sub(basename(file), end = -5))) %>% 
+  rowwise() %>% 
+  mutate(grob = list(grid::rasterGrob(png::readPNG(source = file),
+                                      width = unit(3, "cm"), height = unit(3, "cm"))))
+
+bond_era_ratings_png <- bond_era_ratings %>% 
+  left_join(all_png, by = "surname")
+
+ggplot(data = bond_era_ratings_png) +
+  geom_rect(aes(xmin = first_nr, xmax = last_nr, ymin = -Inf, ymax = Inf, fill = surname),
+            colour = "black", alpha = 0.5) +
+  geom_segment(aes(x = first_nr + 0.25, xend = last_nr - 0.25, y = mean_movie_rating, yend = mean_movie_rating), size = 1.5) +
+  geom_text(aes(x = middle_point, y = 2.9, label = year_text),
+            size = 7) +
+  geom_text(aes(x = middle_point, y = mean_bond_rating - 0.2,
+                label = round(mean_bond_rating, 2)), size = 10) +
+  egg::geom_custom(aes(x = middle_point, y = mean_bond_rating, data = grob), grob_fun = "identity") +
+  scale_x_continuous(breaks = seq(1, 23, 1), labels = x_labels) +
+  scale_y_continuous(limits = c(1, 3), breaks = 1:3) +
+  scale_fill_manual(values = c("grey50", "grey50", NA, NA, NA, "grey50"), name = "") +
+  scale_colour_viridis_d(name = "") +
+  labs(x = "", y = "Bechdel score",
+       title = "How problematic is James Bond?",
+       subtitle = "Bechdel test score of Bond movies compared to movies from the same period",
+       caption = "Data: FiveThirtyEight | Plot: @ldbailey255") +
+  coord_cartesian(expand = FALSE) +
+  theme_classic() +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank())
+
+```
+
+Make it pretty
+
+```{r}
+
+#Load a font from Google Fonts
+sysfonts::font_add_google(name = "Mouse Memoirs", family = "Mouse")
+sysfonts::font_add_google("Ubuntu Mono", "Ubuntu Mono")
+
+#Specify that the showtext package should be used
+#for rendering text
+showtext::showtext_auto()
+
+```
+
+```{r}
+
+all_png <- data.frame(file = list.files(here::here("./inst/extdata/bonds"), pattern = ".png", full.names = TRUE)) %>% 
+  mutate(surname = stringr::str_to_title(stringr::str_sub(basename(file), end = -5))) %>% 
+  rowwise() %>% 
+  mutate(grob = list(grid::rasterGrob(png::readPNG(source = file),
+                                      width = unit(1.125, "cm"), height = unit(1.125, "cm"))))
+
+bond_era_ratings_png <- bond_era_ratings %>% 
+  left_join(all_png, by = "surname")
+
+main_plot <- ggplot(data = bond_era_ratings_png) +
+  geom_rect(aes(xmin = first_nr, xmax = last_nr, ymin = -Inf, ymax = Inf, fill = surname),
+            colour = NA, alpha = 0.5) +
+  geom_segment(aes(x = first_nr + 0.25, xend = last_nr - 0.25, y = mean_movie_rating, yend = mean_movie_rating), size = 1.5) +
+  # geom_segment(aes(x = middle_point, xend = middle_point, y = mean_movie_rating, yend = mean_bond_rating), size = 3) +
+  geom_text(aes(x = middle_point, y = 2.9, label = year_text),
+            size = 25, family = "Mouse") +
+  geom_text(aes(x = middle_point, y = mean_bond_rating - 0.155,
+                label = surname), size = 30, family = "Mouse", colour = "#D53129") +
+  geom_text(aes(x = middle_point, y = mean_bond_rating - 0.23,
+                label = format(round(mean_bond_rating, 2), nsmall = 2)), size = 25, family = "Mouse") +
+  geom_text(aes(x = middle_point, y = mean_movie_rating + 0.05,
+                label = format(round(mean_movie_rating, 2), nsmall = 2)), size = 25, family = "Mouse") +
+  egg::geom_custom(aes(x = middle_point, y = mean_bond_rating, data = grob), grob_fun = "identity") +
+  scale_x_continuous(limits = c(0, NA), breaks = x_labels$movie_nr, labels = x_labels$title) +
+  scale_y_continuous(limits = c(1, 3), breaks = 1:3) +
+  scale_fill_manual(values = c("grey50", "grey50", NA, NA, NA, "grey50"), name = "") +
+  scale_colour_viridis_d(name = "") +
+  labs(x = "", y = "<- Worse                       Bechdel score                       Better ->",
+       title = "How problematic is James Bond?",
+       subtitle = "Bechdel test score of Bond movies compared to movies from the same period") +
+  coord_fixed(ratio = 7, expand = FALSE) +
+  theme_classic() +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 55,
+                                   family = "Mouse", colour = "black"),
+        axis.text.y = element_text(size = 55, family = "Mouse", colour = "black"),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title = element_text(size = 85, family = "Mouse"),
+        plot.title = element_text(size = 95, family = "Mouse"),
+        plot.subtitle = element_text(size = 55))
+
+main <- ggplot2::ggplotGrob(main_plot)
+
+labels <- data.frame(x = 0.87, y = c(0.75, 0.325),
+                     text = c("<span style = 'color:#D53129'>Movies from the same period</span>",
+                              "<span style = 'color:#D53129'>Score of Bond movies</span>"))
+
+ggplot()+
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  annotation_custom(grob = main, xmin = 0, xmax = 0.75, ymin = 0, ymax = 1) +
+  geom_curve(aes(x = 0.85, xend = 0.75, y = 0.75, yend = 0.675), curvature = 0.2,
+             arrow = arrow(length = unit(0.1, "inches")), size = 1) +
+  geom_curve(aes(x = 0.85, xend = 0.725, y = 0.325, yend = 0.4), curvature = -0.2,
+             arrow = arrow(length = unit(0.1, "inches")), size = 1) +
+  ggtext::geom_richtext(data = labels, aes(x = x, y = y, label = text),
+                        size = 25, family = "Mouse", colour = NA) +
+  labs(caption = "Data: FiveThirtyEight | Plot: @ldbailey255") +
+  theme_void() +
+  theme(plot.caption = element_text(size = 50, family = "Ubuntu Mono"))
+
+ggsave(filename = here::here("./plots/2021/Week11/2021Week11.png"), height = 7, width = 10, dpi = 600, scale = 0.9)
+
+```
