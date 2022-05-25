@@ -1,0 +1,329 @@
+---
+title: "Week21_2022_May24"
+output: html_document
+date: '2022-05-24'
+---
+
+```{r, include = FALSE}
+
+#Options
+
+```
+
+## Load data
+
+```{r}
+
+rugby_data <- tidytuesdayR::tt_load(2022, week = 21)
+
+```
+
+## Load required packages
+
+```{r, message=FALSE}
+
+library(ggplot2) #For plotting
+library(dplyr) #For data wrangling
+library(stringr) #For string manipulation
+library(lubridate) #For date manipulation
+library(tidyr) #For pivotting
+library(rnaturalearth) #For getting country shapefiles
+library(sf) #Working with shapefiles in ggplot2
+library(showtext) #To use Quicksand and Source Code Pro custom fonts from Google Fonts
+
+showtext::showtext_auto()
+sysfonts::font_add_google(name = "Quicksand", family = "Quicksand")
+sysfonts::font_add_google(name = "Source Code Pro", family = "Source Code Pro")
+
+```
+
+## Data investigation
+
+Want to do some type of comparison between Aus and NZ. I assume these two will be (some of) the best in 7s and 15s, but I should check. Fiji could easily be better than Aus in 7s!
+
+```{r}
+
+clean_7s_data <- rugby_data$sevens %>% 
+  #NZ seems to have been represented by teams under different names. Call them all NZ
+  dplyr::mutate(across(.cols = c(team_1, team_2, winner, loser),
+                       .fns = ~dplyr::case_when(stringr::str_detect(., pattern = "New Zealand") ~ "New Zealand",
+                                                TRUE ~ .)),
+                #Also extract year from the info that we can group by year
+                year = lubridate::year(date))
+
+clean_7s_data %>% 
+  tidyr::pivot_longer(cols = c(team_1, team_2), values_to = "team") %>% 
+  dplyr::group_by(team) %>% 
+  dplyr::summarise(n = n(),
+                   win_perc = sum(team == winner)/n()) %>% 
+  dplyr::arrange(desc(win_perc))
+
+```
+
+Suspicions confirmed! Now we can wrangle the data for plotting. In each year, I want to know what % of games played were won by Aus and NZ.
+
+For now, just focus on sevens but could also do 15s.
+
+```{r}
+
+(aus_v_nz_longstats <- clean_7s_data %>% 
+   #Move team into a single column and then filter only games with Aus or NZ
+   tidyr::pivot_longer(cols = c(team_1, team_2), values_to = "team") %>% 
+   dplyr::filter(stringr::str_detect(team, pattern = "Australia|New Zealand")) %>% 
+   #For each year, determine the percentage of games won by both Aus and NZ
+   dplyr::group_by(year, team) %>% 
+   dplyr::summarise(n = n(),
+                    perc_win = sum(winner == team)/n(), .groups = "drop")) %>% 
+  head()
+
+```
+
+## Plot
+
+```{r}
+
+Aus_palette <- c("#ff8300", "#004044")
+NZ_palette  <- c("#000000", "#ffffff")
+
+plot_data <- aus_v_nz_longstats %>% 
+  dplyr::select(-n) %>% 
+  #Pivot wider again for our plotting purposes
+  tidyr::pivot_wider(names_from = team, values_from = perc_win) %>% 
+  dplyr::mutate(`New Zealand` = -`New Zealand`,
+                diff = Australia + `New Zealand`)
+
+plot_data_n <- aus_v_nz_longstats %>% 
+  dplyr::select(-perc_win) %>% 
+  #Pivot wider again for our plotting purposes
+  tidyr::pivot_wider(names_from = team, values_from = n) %>% 
+  dplyr::mutate(across(.fns = ~tidyr::replace_na(., 0))) %>% 
+  dplyr::bind_rows(tibble(year = 1998, Australia = 0, `New Zealand` = 0))
+
+line_pts <- data.frame(year = seq(2000, 2020, 10),
+                       y = 1.25)
+
+perc_win_plot <- ggplot() +
+  geom_col(data = plot_data, aes(x = year, y = Australia),
+           fill = Aus_palette[1], colour = Aus_palette[2], size = 1) +
+  geom_col(data = plot_data, aes(x = year, y = `New Zealand`),
+           fill = NZ_palette[1], colour = NZ_palette[2], size = 1) +
+  #Add lines for every decade (with year in text)
+  #This allows us to remove years on x axis maybe
+  geom_segment(data = line_pts, aes(x = year, xend = year, y = -1.25, yend = 1.25),
+               size = 1, colour = "white", alpha = 0.75) +
+  geom_text(data = line_pts, aes(x = year + 0.95, y = y - 0.1, label = year),
+            colour = "white", family = "Quicksand", fontface = "bold") +
+  #Add centre line
+  geom_segment(x = NA, xend = 2023, y = 0, yend = 0, colour = "white", size = 1) +
+  geom_area(data = filter(plot_data, !is.na(diff)) %>% 
+              bind_rows(tibble(year = c(1996.5, 2022.5), diff = c(-0.286, 0.264))), aes(x = year, y = diff),
+            size = 0.75, colour = "white", alpha = 0.75) +
+  geom_text(aes(x = 2024, y = 0.264, label = "RELATIVE\nWIN %"),
+            family = "Quicksand", fontface = "bold", colour = "white") +
+  scale_y_continuous(breaks = seq(-1, 1, 0.5),
+                     labels = paste0(c(100, 50, 0, 50, 100), "%"),
+                     expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0.01, 0.01), limits = c(1996.5, 2026.5)) +
+  coord_equal(ratio = 3.75, clip = "off") +
+  theme_classic() +
+  #Remove x axis (not needed with lines)
+  theme(axis.text.x = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_line(colour = "white"),
+        axis.text.y = element_text(colour = "white", family = "Quicksand"),
+        axis.line.x = element_blank(),
+        axis.line.y = element_line(colour = "white"),
+        plot.background = element_blank(),
+        panel.background = element_blank())
+
+perc_win_grob <- ggplot2::ggplotGrob(perc_win_plot)
+
+```
+
+```{r, fig.height=7, fig.width=12}
+
+#Get Aus and NZ country polygons
+Aus_sf <- sf::st_as_sf(ne_countries(scale = "small", country = c("Australia")))
+Aus_grob <- (ggplot() +
+               geom_sf(data = Aus_sf, fill = Aus_palette[1], colour = Aus_palette[2]) +
+               coord_sf(expand = FALSE) +
+               theme_void() +
+               theme(plot.background = element_blank(),
+                     panel.background = element_blank())) %>% 
+  ggplot2::ggplotGrob(.)
+
+NZ_sf  <- sf::st_as_sf(ne_countries(scale = "small", country = c("New Zealand")))
+NZ_grob <- (ggplot() +
+              geom_sf(data = NZ_sf, fill = NZ_palette[1], colour = NZ_palette[2]) +
+              coord_sf(expand = FALSE) +
+              theme_void() +
+              theme(plot.background = element_blank(),
+                    panel.background = element_blank())) %>% 
+  ggplot2::ggplotGrob(.)
+
+(aus_v_NZ_plot <- ggplot() +
+    geom_text(aes(x = 0.2, y = 1.45, label = "AUSTRALIA"),
+              size = 6, colour = "white", family = "Quicksand", fontface = "bold") +
+    geom_text(aes(x = 0.825, y = 0.2, label = "NEW ZEALAND"),
+              size = 6, colour = "white", family = "Quicksand", fontface = "bold") +
+    annotation_custom(grob = perc_win_grob,
+                      # ymin = 0.45, ymax = 1.05,
+                      xmin = 0.05, xmax = 0.95) +
+    annotation_custom(grob = Aus_grob,
+                      ymin = 1.2, ymax = 1.5,
+                      xmin = 0, xmax = 0.15) +
+    annotation_custom(grob = NZ_grob, 
+                      ymin = 0, ymax = 0.3,
+                      xmin = 0.85, xmax = 1) +
+    geom_segment(aes(x = 0.81, xend = 0.81, y = 1.0, yend = 1.3), colour = "white", size = 0.25) +
+    ggtext::geom_richtext(aes(x = 0.82, y = 1.3,
+                              label = "So far in 2022<br><span style='color:#ff8300'>**AUSTRALIA**</span> has<br>won 88% of games<br>played"),
+                          colour = "white", fill = NA, label.color = NA, hjust = 0, family = "Quicksand") +
+    geom_point(aes(x = 0.81, y = 1.3), size = 3, shape = 21, colour = Aus_palette[2], fill = Aus_palette[1]) +
+    geom_segment(aes(x = 0.16, xend = 0.4, y = 0.4, yend = 0.4), colour = "white", size = 0.25) +
+    geom_segment(aes(x = 0.3, xend = 0.3, y = 0.4, yend = 0.25), colour = "white", size = 0.25) +
+    ggtext::geom_richtext(aes(x = 0.31, y = 0.21,
+                              label = "From 1999-2007<br>**NEW ZEALAND** didn't<br>lose a single game"),
+                          colour = "white", fill = NA, label.color = NA, hjust = 0, family = "Quicksand") +
+    geom_point(aes(x = 0.3, y = 0.25), size = 3, shape = 21, colour = NZ_palette[2], fill = NZ_palette[1]) +
+    scale_x_continuous(limits = c(0, 1)) +
+    scale_y_continuous(limits = c(0, 1.5)) +
+    labs(title = "The Trans-Tasman Rivalry: Australia v. New Zealand",
+         subtitle = "% of total games won since 1997 (Women's rugby 7s)",
+         caption = "Data: ScrumQueens | Plot: @ldbailey255") +
+    theme_void() +
+    theme(plot.background = element_rect(fill = "grey10", colour = NA),
+          panel.background = element_rect(fill = "grey10", colour = NA),
+          plot.title = element_text(colour = "white", size = 20, family = "Quicksand", face = "bold"),
+          plot.subtitle = element_text(colour = "white", size = 15, family = "Quicksand"),
+          plot.caption = element_text(colour = "white", family = "Source Code Pro"),
+          plot.margin = margin(t = 10, b = 6, r = 6, l = 10)))
+
+ggsave(filename = here::here("./plots/2022/Week21.png"), height = 7, width = 12, dpi = 600)
+
+```
+
+## BONUS: Add a gt table
+
+Load additional libraries we need
+
+```{r, message=FALSE}
+
+library(countrycode) #To convert country names to ISO codes
+library(gt) #To make gt table
+library(scales) #To create a colour scale for plot
+library(bstfun) #To turn gt object to ggplot object
+library(patchwork) #To combine ggplot objects
+
+```
+
+Companion gt table to show that Aus and NZ are at the top
+
+```{r}
+
+gt_palette <- col_numeric(c("#FEF0D9", "#990000"), domain = c(0.5, 1), alpha = 0.75)
+
+flag_db <- read.csv("data/Country_Flags.csv") %>% 
+  #Convert country names into 3-letter country codes
+  dplyr::mutate(Code = countrycode(sourcevar = Country, origin = "country.name", destination = "iso3c", warn = FALSE)) %>%
+  #Have to manually add codes of England, Scotland and Wales (not countries with ISO codes it seems)
+  dplyr::mutate(Code = dplyr::case_when(Country == "England" ~ "ENG",
+                                        Country == "Scotland" ~ "SCO",
+                                        Country == "Wales" ~ "WAL",
+                                        TRUE ~ Code)) %>%
+  dplyr::select(Code, flag_URL = ImageURL)
+
+clean_7s_data_wflags <- clean_7s_data %>% 
+  tidyr::pivot_longer(cols = c(team_1, team_2), values_to = "team") %>% 
+  dplyr::group_by(team) %>% 
+  dplyr::summarise(n = n(),
+                   win_perc = sum(team == winner)/n()) %>% 
+  #Only take teams that have played at least 100 games
+  dplyr::filter(n >= 100) %>% 
+  dplyr::arrange(desc(win_perc)) %>%
+  #Take the top 10 (just to keep the table managable)
+  dplyr::slice(1:10) %>% 
+  dplyr::mutate(Code = countrycode(sourcevar = team, origin = "country.name", destination = "iso3c", warn = FALSE)) %>%
+  #Have to manually add codes of England, Scotland and Wales (not countries with ISO codes it seems)
+  dplyr::mutate(Code = dplyr::case_when(team == "England" ~ "ENG",
+                                        team == "Scotland" ~ "SCO",
+                                        team == "Wales" ~ "WAL",
+                                        TRUE ~ Code)) %>%
+  dplyr::left_join(flag_db, by = "Code") %>% 
+  dplyr::select(flag_URL, team, everything())
+
+gt_tbl <- clean_7s_data_wflags %>% 
+  gt() %>% 
+  cols_hide(columns = c(n, Code)) %>% 
+  cols_label(flag_URL = "",
+             team = "",
+             win_perc = "% games won") %>% 
+  tab_header(title = "Greatest teams of all",
+             subtitle = "Winning percentage of women's rugby 7s teams") %>% 
+  tab_source_note(source_note = "Data: ScrumQueens") %>% 
+  fmt_number(columns = c(win_perc), n_sigfig = 2) %>% 
+  tab_style(
+    locations = cells_column_labels(columns = everything()),
+    style     = list(
+      cell_borders(sides = "bottom", weight = px(3)),
+      cell_text(weight = "bold")
+    )
+  ) %>% 
+  tab_style(
+    locations = cells_title(groups = "title"),
+    style     = list(
+      cell_text(weight = "bold", size = 24)
+    )
+  ) %>% 
+  data_color(columns = c(win_perc),
+             colors = gt_palette) %>% 
+  opt_all_caps() %>% 
+  opt_table_font(
+    font = list(
+      google_font("Quicksand"),
+      default_fonts()
+    )
+  ) %>%
+  cols_width(c(win_perc) ~ px(150),
+             c(team) ~ px(200)) %>% 
+  tab_options(
+    column_labels.border.top.width = px(3),
+    column_labels.border.top.color = "transparent",
+    table.border.top.color = "transparent",
+    table.border.bottom.color = "transparent",
+    data_row.padding = px(3),
+    source_notes.font.size = 12,
+    heading.align = "left") %>% 
+  gt::text_transform(
+    #Apply a function to a column
+    locations = cells_body(c(flag_URL)),
+    fn = function(x) {
+      #Return an image of set dimensions
+      web_image(
+        url = x,
+        height = 12
+      )
+    }
+  ) %>% 
+  #Hide column header flag_URL and reduce width
+  cols_width(c(flag_URL) ~ px(30)) %>% 
+  cols_label(flag_URL = "")
+
+```
+
+Turn into ggplot and combine with our other plot using patchwork. This works, but it's probably not what we're after. Leave it here just to keep the code.
+
+```{r}
+
+gt_tbl_ggplot <- as_ggplot(gt_tbl)
+
+aus_v_NZ_plot + (gt_tbl_ggplot) + plot_layout(nrow = 1, widths = c(5, 1)) +
+  plot_annotation(theme = theme(plot.background = element_rect(fill = "grey10", colour = NA),
+                                panel.background = element_rect(fill = "grey10", colour = NA),
+                                plot.margin = margin(r = 10, l = 0)))
+
+ggplot2::ggsave(filename = here::here("./plots/2022/Week21_wgt.png"), height = 7, width = 10, dpi = 600)
+
+```
+

@@ -1,0 +1,203 @@
+---
+title: "Week20_2020"
+author: "Liam D. Bailey"
+output: html_document
+---
+
+```{r, echo = FALSE, include = FALSE}
+options(scipen = 200)
+
+library(dplyr)
+library(ggplot2)
+```
+
+## Goal
+
+The goal in this TidyTuesday is to make an animated plot using nested images. This will necessarily require using Image Magick rather than `gganimate`.
+
+## Preparation
+
+**Read in data**
+
+```{r}
+
+#All TidyTuesday data
+tuesdata <- tidytuesdayR::tt_load('2020-05-12')
+tuesdata <- tidytuesdayR::tt_load(2020, week = 20)
+
+#Eruption data
+eruptions <- tuesdata$eruptions
+
+#Map data
+borders <- ggplot2::map_data("world", ".", xlim = NULL, ylim = NULL)
+
+```
+
+**Clean the data**
+
+We can only use data with date information, lat/long, and vei.
+
+There are a number of pre-historic volcanic eruptions in the data, so here we'll just subset those since 1800.
+
+```{r}
+
+eruptions_clean <- eruptions %>% 
+  dplyr::filter_at(.vars = vars(starts_with("start"), starts_with("end"), latitude, longitude, vei), ~!is.na(.)) %>% 
+  dplyr::filter(start_year >= 1800) %>% 
+  dplyr::mutate(start_day = replace(start_day, start_day == 0, 1),
+                start_month = replace(start_month, start_month == 0, 1)) %>% 
+  dplyr::mutate(fulldate = lubridate::ymd(paste(start_year, start_month, start_day)))
+
+```
+
+## Inset plot: group eruptions by volcano number over time
+
+```{r}
+
+eruptions_cumulative <- eruptions_clean %>% 
+  dplyr::group_by(volcano_number, fulldate) %>% 
+  dplyr::summarise(daily_eruptions = n()) %>% 
+  dplyr::mutate(eruption_cumsum = cumsum(daily_eruptions))
+
+#Work out cutoff for most active volcanoes
+eruptions_total <- eruptions_cumulative %>% 
+  dplyr::summarise(total_eruptions = sum(daily_eruptions))
+
+big_cutoff <- eruptions_total %>% 
+  dplyr::pull(total_eruptions) %>% 
+  quantile(0.95)
+
+eruptions_total <- eruptions_total %>% 
+  dplyr::mutate(isbig = total_eruptions > big_cutoff) %>% 
+  dplyr::select(-total_eruptions)
+
+eruptions_plot_data <- dplyr::left_join(eruptions_cumulative, eruptions_total, by = "volcano_number")
+
+side_plot <- ggplot(data = eruptions_plot_data)+
+  geom_line(aes(x = fulldate, y = eruption_cumsum, group = volcano_number, colour = isbig, size = isbig)) +
+  scale_colour_manual(values = c("#334E58", "#C52C12")) +
+  scale_size_manual(values = c(0.5, 1)) +
+  theme_classic() +
+  theme(panel.background = element_rect(fill = "#32292F"),
+        plot.background = element_rect(fill = "#32292F"),
+        axis.title = element_text(colour = "#F8F7FF"),
+        axis.text = element_text(colour = "#F8F7FF"),
+        axis.line = element_line(colour = "#F8F7FF"),
+        axis.ticks = element_line(colour = "#F8F7FF"),
+        plot.margin = ggplot2::margin(t = 100, b = 100))
+
+```
+
+## Base map w/ inset
+
+## Create base map
+
+```{r}
+
+base_map <- ggplot() +
+  geom_polygon(data = borders, aes(x = long, y = lat, group = group), fill = "#334E58", colour = "#F8F7FF",
+               alpha = 0.75, size = 0.5) +
+  geom_point(data = eruptions_clean, aes(x = longitude, y = latitude, size = vei), colour = "#C52C12", alpha = 0.75) +
+  theme_classic() +
+  theme(plot.background = element_rect(fill = "#32292F"),
+        panel.background = element_rect(fill = "#32292F"),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        legend.position = "none")
+
+base_map
+
+```
+
+## Animate base map
+
+```{r}
+
+ggplot() +
+  geom_polygon(data = borders, aes(x = long, y = lat, group = group), fill = "#334E58", colour = "#F8F7FF",
+               alpha = 0.75, size = 0.5) +
+  geom_point(data = eruptions_clean, aes(x = longitude, y = latitude, size = vei), colour = "#C52C12", alpha = 0.75) +
+  theme_classic() +
+  theme(plot.background = element_rect(fill = "#32292F"),
+        panel.background = element_rect(fill = "#32292F"),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        legend.position = "none")+
+  #Start gganimate code
+  gganimate::transition_time(time = fulldate)+
+  labs(title = "Year: {frame_time}")+
+  gganimate::shadow_mark(alpha = 0.25, wrap = FALSE, size = 2, exclude_layer = 2:3)+
+  gganimate::ease_aes("linear")
+
+```
+
+## Create combo plot using patchwork
+
+```{r}
+
+library(patchwork)
+
+base_map + side_plot + 
+  plot_layout(widths = c(2, 1))
+
+```
+
+
+```{r}
+
+ggsave(filename = "../plots/map_test.jpeg", dpi = 600, width = 12, height = 7)
+
+```
+
+```{r}
+
+a <- ggplot(means_df, aes(x = IV,y = means, fill = IV)) +
+  geom_bar(stat = "identity") +
+  geom_point(aes(x = IV, y = DV), data = df, alpha = .25) +
+  geom_errorbar(aes(ymin = means - sem, ymax = means + sem), width = .2) +
+  theme_classic() +
+  transition_states(
+    states = sims,
+    transition_length = 2,
+    state_length = 1
+  ) + 
+  enter_fade() + 
+  exit_shrink() +
+  ease_aes('sine-in-out')
+  
+a_gif <- animate(a, width = 240, height = 240)
+
+b <- ggplot(stats_df, aes(x = ts))+
+  geom_vline(aes(xintercept = ts, frame = sims))+
+  geom_line(aes(x=x,y=y),
+            data = data.frame(x = seq(-5,5, .1),
+                              y = dt(seq(-5,5, .1), df = 18))) +
+  theme_classic() +
+  ylab("density") +
+  xlab("t value") +
+  transition_states(
+    states = sims,
+    transition_length = 2,
+    state_length = 1
+  ) +
+  enter_fade() + 
+  exit_shrink() +
+  ease_aes('sine-in-out')
+
+b_gif <- animate(b, width = 240, height = 240)
+
+a_mgif <- image_read(a_gif)
+b_mgif <- image_read(b_gif)
+
+new_gif <- image_append(c(a_mgif[1], b_mgif[1]))
+for(i in 2:100){
+  combined <- image_append(c(a_mgif[i], b_mgif[i]))
+  new_gif <- c(new_gif, combined)
+}
+
+new_gif
+
+```
+
