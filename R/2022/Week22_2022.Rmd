@@ -1,0 +1,270 @@
+---
+title: "Week22_2022"
+author: "Liam D. Bailey"
+date: '2022-05-31'
+output: html_document
+---
+
+```{r, include = FALSE}
+
+#Options
+
+```
+
+## Load data
+
+```{r}
+
+companyrep_data <- tidytuesdayR::tt_load(2022, week = 22)
+
+```
+
+## Load required packages
+
+```{r, message=FALSE}
+
+library(ggplot2) #For plotting
+library(dplyr) #For data wrangling
+library(bstfun) #To turn gt object to ggplot object
+library(patchwork) #To combine ggplot objects
+library(showtext) #For custom fonts
+library(gt) #For creating nice tables
+library(scales) #For creating nice palettes
+
+showtext::showtext_auto()
+sysfonts::font_add_google(name = "Quicksand", family = "Quicksand")
+sysfonts::font_add_google(name = "Source Code Pro", family = "Source Code Pro")
+
+```
+
+## Data investigation and wrangling
+
+Adjust data to add 2022 in long format.
+
+```{r}
+
+poll_long <- companyrep_data$poll %>% 
+  filter(!is.na(rq)) %>% 
+  select(company, industry, `2022` = `2022_rq`, year, rq) %>% 
+  tidyr::pivot_wider(names_from = year, values_from = rq) %>% 
+  tidyr::pivot_longer(cols = `2022`:`2017`, names_to = "year", values_to = "rq") %>% 
+  filter(!is.na(rq)) %>% 
+  #Make year a numeric
+  mutate(year = as.numeric(year))
+
+head(poll_long)
+
+```
+
+Determine avg ranking for each industry each year (remove 'other') and rank them.
+
+```{r}
+
+industry_avg <- poll_long %>% 
+  filter(industry != "Other") %>% 
+  group_by(year, industry) %>% 
+  #Within each industry/year combo, determine median rq
+  summarise(med_rq = median(rq), .groups = "drop_last") %>% 
+  #In each year, rank industries based on this median
+  arrange(desc(med_rq), .by_group = TRUE) %>% 
+  mutate(rank = 1:n()) %>% 
+  ungroup() %>% 
+  mutate(rank_fct = forcats::fct_reorder(.f = as.character(rank), .x = rank),
+         #We want to highlight ECommerce and Food Delivery, so give them a different group
+         highlight = industry %in% c("Ecommerce", "Food Delivery"))
+
+head(industry_avg)
+
+```
+
+Separate out data for 2017 and 2020 (the edges of our data). We will use this data to create points and tables at either end of the plot.
+
+```{r}
+
+industry_avg2017 <- industry_avg %>% 
+  filter(year == 2017) %>% 
+  #Add in row for Healthcare which is missing in 2017 but in 2022
+  bind_rows(tibble(year = 2017,
+                   industry = "Healthcare",
+                   med_rq = NA_real_,
+                   rank = 18)) %>% 
+  mutate(industry = forcats::fct_reorder(.f = industry, .x = med_rq, .desc = TRUE))
+
+industry_avg2022 <- industry_avg %>% 
+  filter(year == 2022) %>% 
+  mutate(industry = forcats::fct_reorder(.f = industry, .x = med_rq, .desc = TRUE))
+
+```
+
+## Plot
+
+### Plot 1: Change in median ranking of different industries
+
+We want to make a ranking plot showing changes in the different industries over time.
+
+```{r}
+
+points_palette        <- scales::col_numeric(c("#8e0000", "#ff4242", "#00d63c", "#004714"),
+                                             domain = c(18,1), alpha = 0.75)
+
+ggplot_rank_lines <- ggplot() +
+  geom_line(data = industry_avg, aes(x = year, y = rank, group = industry,
+                                     size = highlight, alpha = highlight)) +
+  geom_point(data = industry_avg %>% filter(year == 2022 | (year == 2017 & rank != 18)),
+             aes(x = year, y = rank, fill = rank_fct),
+             shape = 21, colour = "black", size = 3, stroke = 1) +
+  # geom_point(data = industry_avg2017 %>% filter(rank == 18), aes(x = year, y = rank),
+  #            shape = 21, colour = "black", fill = "grey", size = 3, stroke = 1) +
+  scale_fill_manual(values = points_palette(18:1)) +
+  scale_size_manual(values = c(0.25, 1)) +
+  scale_alpha_manual(values = c(0.5, 1)) +
+  scale_y_reverse(breaks = 1:max(industry_avg$rank), limits = c(NA, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  coord_cartesian(clip = "off") +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        plot.margin = margin(r = 5, t = 0, l = 5, b = 0))
+
+ggplot_rank_lines
+
+```
+
+Create our companion gt table to attach for the last year
+
+```{r}
+
+
+gt_palette          <- scales::col_numeric(c("#8e0000", "#ff4242", "#00d63c", "#004714"),
+                                         domain = NULL, alpha = 0.75)
+#Need to create palettes for each year because the colours for each industry group will differ between years
+gt_palette_factor22 <- scales::col_factor(palette = gt_palette(industry_avg2022$med_rq),
+                                        domain = industry_avg2022$industry, alpha = 0.75) 
+
+tbl_2022 <- industry_avg2022 %>% 
+  select(med_rq, industry) %>% 
+  gt() %>% 
+  cols_label(med_rq = "") %>% 
+  fmt_number(columns = c(med_rq), n_sigfig = 3) %>% 
+  tab_style(
+    locations = cells_column_labels(columns = everything()),
+    style     = list(
+      cell_borders(sides = "bottom", weight = px(3)),
+      cell_text(weight = "bold")
+    )
+  ) %>% 
+  tab_style(
+    locations = cells_title(groups = "title"),
+    style     = list(
+      cell_text(weight = "bold", size = 24)
+    )
+  ) %>% 
+  data_color(columns = c(med_rq),
+             colors = gt_palette) %>%
+  data_color(columns = c(industry),
+             colors = gt_palette_factor22) %>% 
+  opt_all_caps() %>%
+  opt_table_font(
+    font = list(
+      google_font("Quicksand"),
+      default_fonts()
+    )
+  ) %>%
+  cols_align(align = "left",
+             columns = c(med_rq)) %>% 
+  cols_align(align = "center",
+             columns = c(industry)) %>% 
+  cols_width(c(industry) ~ px(145),
+             c(med_rq) ~ px(70)) %>% 
+  tab_options(
+    column_labels.border.top.width = px(3),
+    column_labels.border.top.color = "transparent",
+    table.border.top.color = "transparent",
+    table.border.bottom.color = "transparent",
+    data_row.padding = px(3),
+    source_notes.font.size = 12,
+    heading.align = "left")
+
+tbl_2022
+
+```
+
+Do it for start and end year
+
+```{r}
+
+gt_palette_factor17 <- scales::col_factor(palette = gt_palette(industry_avg2017$med_rq),
+                                        domain = industry_avg2017$industry, alpha = 0.75) 
+
+tbl_2017 <- industry_avg2017 %>% 
+  select(industry, med_rq) %>% 
+  gt() %>% 
+  cols_label(med_rq = "") %>% 
+  fmt_number(columns = c(med_rq), n_sigfig = 3) %>% 
+  tab_style(
+    locations = cells_column_labels(columns = everything()),
+    style     = list(
+      cell_borders(sides = "bottom", weight = px(3)),
+      cell_text(weight = "bold")
+    )
+  ) %>% 
+  tab_style(
+    locations = cells_title(groups = "title"),
+    style     = list(
+      cell_text(weight = "bold", size = 24)
+    )
+  ) %>% 
+  data_color(columns = c(med_rq),
+             colors = gt_palette) %>%
+  data_color(columns = c(industry),
+             colors = gt_palette_factor17) %>% 
+  opt_all_caps() %>%
+  opt_table_font(
+    font = list(
+      google_font("Quicksand"),
+      default_fonts()
+    )
+  ) %>%
+  cols_align(align = "right",
+             columns = c(med_rq)) %>%
+  cols_align(align = "center",
+             columns = c(industry)) %>% 
+  cols_width(c(industry) ~ px(145),
+             c(med_rq) ~ px(70)) %>% 
+  tab_options(
+    column_labels.border.top.width = px(3),
+    column_labels.border.top.color = "transparent",
+    table.border.top.color = "transparent",
+    table.border.bottom.color = "transparent",
+    data_row.padding = px(3),
+    source_notes.font.size = 12,
+    heading.align = "left")
+
+tbl_2017
+
+```
+
+Turn the tables into ggplot objects and combine in plot.
+
+```{r}
+
+#Convert gt tables to ggplot objects to use in patchwork
+tbl_2017_ggplot <- bstfun::as_ggplot(tbl_2017)
+tbl_2022_ggplot <- bstfun::as_ggplot(tbl_2022) 
+
+#Combine gt tables and line plot
+tbl_2017_ggplot + ggplot_rank_lines + tbl_2022_ggplot +
+  patchwork::plot_annotation(title = "Reputation of Ecommerce & Food delivery has plummetted since 2017",
+                             subtitle = "Average reputational score of major US companies across each industry group",
+                             caption = "Data: Axios and Harris Poll | Plot: @ldbailey255",
+                             theme = theme(plot.title = element_text(colour = "black", size = 20, family = "Quicksand", face = "bold"),
+                                           plot.subtitle = element_text(colour = "black", size = 15, family = "Quicksand"),
+                                           plot.caption = element_text(colour = "black", family = "Source Code Pro")))
+
+ggsave(filename = here::here("./plots/2022/Week22.png"), height = 7, width = 15, dpi = 600)
+  
+```
+
