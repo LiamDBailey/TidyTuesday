@@ -285,27 +285,48 @@ county_sf_SW_drought <- county_sf_SW %>%
 As an example, plot drought in last month of data (2022-06-01)
 
 ```{r}
+
+labels <- data.frame(state = c("California", "Nevada", "Utah", "Colorado", "Arizona", "New\nMexico"),
+                     long = c(-124.880117, -118.535087, -112.514628, -107.338972, -116.056803, -102.809409),
+                     lat = c(35.957911, 42.302400, 42.302400, 41.366379, 31.938733, 34.310535)) %>% 
+  sf::st_as_sf(x = ., coords = c(2, 3), crs = sf::st_crs(county_sf_SW_drought))
+
 ggplot() +
   geom_sf(data = dplyr::filter(county_sf_SW_drought, month_yr == "2022-06-01"),
           aes(fill = avg_DSCI)) +
   geom_sf(data = state_sf_notSW, fill = NA, colour = "black", size = 1) +
+  geom_sf_text(data = labels, aes(label = state),
+               colour = "white", size = 4.5, hjust = 0,
+               family = "Miki") +
   scale_fill_gradientn(colours = warming_bars_palette,
                        limits = c(-350, 350),
                        breaks = c(-350, 0, 350),
                        labels = c("Lower drought score\nthan normal",
                                   "Average drought score\n(2000-2022)",
                                   "Higher drought score\nthan normal"),
-                       guide = guide_colourbar(nbin = 100,
+                       guide = guide_colourbar(nbin = 50,
                                                ticks.colour = "black",
                                                ticks.linewidth = 0.5,
-                                               frame.colour = "white",
+                                               frame.colour = "grey50",
                                                raster = TRUE)) +
+  labs(title = "DROUGHT CONDITIONS IN US SOUTHWEST: JUNE 2022",
+       subtitle = "June 2022 was the 10th worst drought month on record since 2000",
+       caption = "Data: www.drought.gov | Plot: @ldbailey255") +
   theme_void() +
   theme(legend.position = "bottom", legend.title = element_blank(),
-        legend.text = element_text(colour = "white"),
-        legend.key.width = unit(2, units = "cm"),
+        legend.text = element_text(colour = "white", family = "Miki", size = 10),
+        legend.key.width = unit(3, units = "cm"),
         plot.background = element_rect(fill = "grey10", colour = NA),
-        plot.margin = margin(t = 20, r = 20, b = 20, l = 20))
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        plot.title = element_text(colour = "white", size = 20, hjust = 0, family = "Alfa_Slab_One",
+                                  margin = margin(b = 5)),
+        plot.subtitle = element_text(colour = "white", size = 14, hjust = 0, family = "Miki",
+                                     margin = margin(b = 15)),
+        plot.caption = element_text(colour = "white", hjust = 1, family = "Cutive_Mono",
+                                    margin = margin(t = 15)))
+
+ggsave(here(glue::glue("./plots/2022/Week24_map_staticJun2022.png", date = date)),
+       height = 7.5, width = 9.5, dpi = 150)
 ```
 
 ### Combine to show static
@@ -344,7 +365,7 @@ map <- ggplot() +
 
 sw_drought <- ggplot(data = plot_data) +
   geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US),
-           colour = NA) + 
+           colour = "grey90", size = 0.02) + 
   geom_segment(aes(x = date, xend = date,
                    y = 1.5, yend = 1),
                arrow = arrow(length = unit(2, units = "mm")), colour = "white") +
@@ -395,7 +416,7 @@ ggplot() +
 
 ```
 
-### Combine to show static
+### Create .gif
 
 ```{r}
 
@@ -430,7 +451,7 @@ purrr::map(.x = dates, .f = function(date){
   
   sw_drought <- ggplot(data = plot_data) +
     geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US),
-             colour = NA) + 
+             colour = "grey90", size = 0.02) + 
     geom_segment(aes(x = date, xend = date,
                      y = 1.5, yend = 1),
                  arrow = arrow(length = unit(2, units = "mm")), colour = "white") +
@@ -513,7 +534,7 @@ purrr::map(.x = dates, .f = function(date){
 
 library(magick)
 imgs <- list.files(here("./plots/2022/Week24_gif"),
-                  pattern = ".png", full.names = TRUE)
+                   pattern = ".png", full.names = TRUE)
 
 ## list file names and read in
 img_list <- lapply(imgs, image_read)
@@ -528,5 +549,143 @@ img_animated <- image_animate(img_joined, fps = 10, loop = 0,
 ## save to disk
 image_write(image = img_animated,
             path = here("./plots/2022/Week24_map.gif"))
+
+```
+
+### gif small enough for Twitter (<=15MB)
+
+```{r}
+
+library(patchwork)
+
+dates <- seq.Date(from = min(plot_data$month_yr),
+                  to = max(plot_data$month_yr), by = "month")
+
+labels <- data.frame(state = c("California", "Nevada", "Utah", "Colorado", "Arizona", "New\nMexico"),
+                     long = c(-124.880117, -118.535087, -112.514628, -107.338972, -116.056803, -102.809409),
+                     lat = c(35.957911, 42.302400, 42.302400, 41.366379, 31.938733, 34.310535)) %>% 
+  sf::st_as_sf(x = ., coords = c(2, 3), crs = sf::st_crs(county_sf_SW_drought))
+
+purrr::map(.x = dates, .f = function(date){
+  
+  map <- ggplot() +
+    geom_sf(data = dplyr::filter(county_sf_SW_drought, month_yr == date),
+            aes(fill = avg_DSCI)) +
+    geom_sf(data = state_sf_notSW, fill = NA, colour = "black", size = 1) +
+    geom_sf_text(data = labels, aes(label = state),
+                 colour = "white", size = 3, hjust = 0,
+                 family = "Miki") +
+    scale_fill_gradientn(colours = warming_bars_palette,
+                         limits = c(-350, 350),
+                         breaks = c(-350, 0, 350),
+                         guide = NULL) +
+    coord_sf(clip = "off") +
+    theme_void() +
+    theme(legend.position = "none",
+          plot.background = element_rect(fill = "grey10", colour = NA),
+          plot.margin = margin(t = 40, r = 0, b = 0, l = 0))
+  
+  sw_drought <- ggplot(data = plot_data) +
+    geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US),
+             colour = "grey90", size = 0.02) + 
+    geom_segment(aes(x = date, xend = date,
+                     y = 1.5, yend = 1),
+                 arrow = arrow(length = unit(1, units = "mm")), colour = "white") +
+    scale_fill_gradientn(colours = warming_bars_palette,
+                         #These are extended so that DSCI can be compared to the county wide data on the map
+                         limits = c(-350, 350),
+                         breaks = c(-350, 0, 350)) +
+    scale_x_date(expand = c(0, 0),
+                 breaks = seq.Date(as.Date("2000-06-01"),
+                                   as.Date("2022-06-01"), by = "2 year"), date_labels = "%Y") +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_equal(ratio = 900, clip = "off") +
+    theme_classic() +
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.text.x = element_text(colour = "white", size = 7, family = "Miki"),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          legend.position = "none",
+          plot.background = element_rect(fill = "grey10", colour = NA),
+          panel.background = element_blank(),
+          plot.margin = margin(t = 0, r = 0, b = 0, l = 0))
+  
+  map_grob <- ggplotGrob(map)
+  stripes_grob <- ggplotGrob(sw_drought)
+  
+  ggplot() +
+    scale_x_continuous(limits = c(0, 1)) +
+    scale_y_continuous(limits = c(0, 0.85)) +
+    coord_equal(clip = "off") +
+    annotation_custom(grob = stripes_grob,
+                      xmin = 0.1, xmax = 0.9,
+                      ymin = 0, ymax = 0.2) +
+    annotation_custom(grob = map_grob,
+                      ymin = 0.05, ymax = 1.1) +
+    #ADD TEXT FOR BLUE YEAR
+    geom_segment(aes(x = 0.04, xend = 0.09,
+                     y = 0.1, yend = 0.1),
+                 size = 0.5, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_segment(aes(x = 0.04, xend = 0.04,
+                     y = 0.185, yend = 0.1),
+                 size = 0.5, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_richtext(aes(x = 0.04, y = 0.15,
+                      label = "<span style='color:#08519c;font-family:Alfa_Slab_One'>BLUE</span><span style='color:white;font-family:Miki'> years<br>have below<br>average drought</span>"),
+                  hjust = 1, fill = NA, label.colour = NA,
+                  size = 3) +
+    #ADD TEXT FOR RED YEAR
+    geom_segment(aes(x = 1 - 0.04, xend = 1 - 0.09,
+                     y = 0.1, yend = 0.1),
+                 size = 0.5, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_segment(aes(x = 1 - 0.04, xend = 1 - 0.04,
+                     y = 0.185, yend = 0.1),
+                 size = 0.5, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_richtext(aes(x = 1 - 0.04, y = 0.15,
+                      label = "<span style='color:#a50f15;font-family:Alfa_Slab_One'>RED</span><span style='color:white;font-family:Miki'> years<br>have above<br>average drought</span>"),
+                  hjust = 0, fill = NA, label.colour = NA,
+                  size = 3) +
+    labs(title = "DROUGHT IN THE US SOUTHWEST IS THE\nWORST IN OVER 2 DECADES",
+         subtitle = paste(worst_droughts, "of the 20 worst drought months have occurred since 2020"),
+         caption = "Data: www.drought.gov | Plot: @ldbailey255") +
+    theme_void() +
+    theme(plot.background = element_rect(fill = "grey10", colour = NA),
+          plot.margin = margin(t = 0, r = 50, b = 0, l = 50),
+          plot.title = element_text(colour = "white", size = 10, hjust = 0, family = "Alfa_Slab_One"),
+          plot.subtitle = element_text(colour = "white", size = 9, hjust = 0, family = "Miki"),
+          plot.caption = element_text(colour = "white", hjust = 1, family = "Cutive_Mono"))
+  
+  ggsave(here(glue::glue("./plots/2022/Week24_gif/Week24_map_{date}.png", date = date)),
+         height = 4.5, width = 6.5, dpi = 125)
+  
+  return()
+  
+})
+
+```
+
+```{r}
+
+library(magick)
+imgs <- list.files(here("./plots/2022/Week24_gif"),
+                   pattern = ".png", full.names = TRUE)
+
+## list file names and read in
+img_list <- lapply(imgs, image_read)
+
+## join the images together
+img_joined <- image_join(img_list)
+
+## animate at 2 frames per second
+img_animated <- image_animate(img_joined, fps = 10, loop = 0,
+                              optimize = TRUE)
+
+## save to disk
+image_write(image = img_animated,
+            path = here("./plots/2022/Week24_map_twitter.gif"))
 
 ```
