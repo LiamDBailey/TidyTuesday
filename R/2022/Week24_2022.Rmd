@@ -1,0 +1,532 @@
+---
+title: "Week24_2022"
+author: "Liam D. Bailey"
+date: '2022-06-21'
+output: html_document
+---
+
+```{r, include = FALSE}
+
+#Options
+
+```
+
+## Load data
+
+```{r}
+
+drought_data <- tidytuesdayR::tt_load(2022, week = 24)
+
+```
+
+## Load required packages
+
+```{r, message=FALSE}
+
+library(ggplot2) #For plotting
+library(dplyr) #For data wrangling
+library(patchwork) #To combine ggplot objects
+library(showtext) #For custom fonts
+library(gt) #For creating nice tables
+library(scales) #For creating nice palettes
+library(lubridate) #For working with dates
+library(ggtext) #For richtext
+library(here) #For easier relative paths
+
+showtext::showtext_auto()
+sysfonts::font_add_google(name = "Quicksand", family = "Quicksand")
+sysfonts::font_add_google(name = "Source Code Pro", family = "Source_Code_Pro")
+sysfonts::font_add_google(name = "Cherry Swash", family = "Cherry_Swash")
+sysfonts::font_add_google(name = "Alfa Slab One", family = "Alfa_Slab_One")
+sysfonts::font_add_google(name = "Cutive Mono", family = "Cutive_Mono")
+font_add("Miki",
+         regular = "KontrapunktMiki-Regular.otf",
+         bold = "KontrapunktMiki-Bold.otf")
+
+```
+
+```{r}
+
+drought_fips <- drought_data$`drought-fips`
+
+```
+
+## Plot 1: Colour bars/month
+
+We want to create a colour bar for every month where colour represents the avg DSCI/county in California.
+
+We focus on California because this is an area where changes in drought have been very severe. Other areas may actually have got *wetter* over time due to changes in weather patterns!
+
+```{r}
+
+plot_data <- drought_fips %>% 
+  filter(State == "CA") %>% 
+  mutate(month_yr = ymd(paste(year(date), month(date), 1))) %>% 
+  #Determine the mean DSCI score/FIPS/month
+  group_by(month_yr, FIPS) %>% 
+  summarise(avg_DSCI = mean(DSCI), .groups = "drop_last") %>% 
+  summarise(avg_DSCI_US = mean(avg_DSCI))
+
+```
+
+```{r}
+
+#Mean centre the data so we can see how it's changed over time
+plot_data <- plot_data %>% 
+  mutate(centre_avg_DSCI_US = avg_DSCI_US - mean(avg_DSCI_US))
+
+warming_bars_palette <- c("#08306b",
+                          "#08519c",
+                          "#2171b5",
+                          "#4292c6",
+                          "#6baed6",
+                          "#9ecae1",
+                          "#c6dbef",
+                          "#deebf7",
+                          "#ffffff",
+                          "#fee0d2",
+                          "#fcbba1",
+                          "#fc9272",
+                          "#fb6a4a",
+                          "#ef3b2c",
+                          "#cb181d",
+                          "#a50f15",
+                          "#67000d")
+
+ggplot(data = plot_data) +
+  geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US), colour = NA) +
+  scale_fill_gradientn(colours = warming_bars_palette, limits = c(-330, 330),
+                       breaks = c(-330, 0, 330),
+                       labels = c("Lower drought score\nthan normal",
+                                  "Average California drought score\n(2000-2022)", "Higher drought score\nthan normal"),
+                       guide = guide_colourbar(nbin = 300,
+                                               ticks.colour = "black", ticks.linewidth = 0.5,
+                                               frame.colour = "white")) +
+  scale_x_date(expand = c(0, 0), name = "AVG. DROUGHT SCORE\n(across all California counties)",
+               breaks = seq.Date(as.Date("2000-06-01"),
+                                 as.Date("2022-06-01"), by = "2 year"), date_labels = "%Y") +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = "CALIFORNIA DROUGHTS ARE GETTING MORE SEVERE",
+       subtitle = "Something about drought",
+       caption = "Data: www.drought.gov | Plot: @ldbailey255") +
+  theme_classic() +
+  theme(axis.line = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(colour = "white"),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text(margin = margin(t = 20, b = 0),
+                                    colour = "white"),
+        plot.title = element_text(colour = "white"),
+        plot.subtitle = element_text(colour = "white"),
+        plot.caption = element_text(colour = "white", margin = margin(t = 20)),
+        legend.position = "bottom",
+        legend.key.width = unit(3, units = "cm"),
+        legend.title = element_blank(), legend.text = element_text(colour = "white"),
+        legend.margin = margin(t = 0), legend.background = element_blank(),
+        plot.background = element_rect(fill = "grey10", colour = NA),
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20))
+
+```
+
+### Plot 1b: Colour bars/month
+
+Do the same thing, but expand to American Southwest. We define Southwest as California (CA), Arizona (AZ), Nevada (NV), New Mexico (NM),
+Colorado (CO), and Utah (UT)
+
+We want to create a colour bar for every month where colour represents the avg DSCI/county in American S.West.
+
+```{r}
+
+plot_data <- drought_fips %>% 
+  filter(State %in% c("CA", "AZ", "NV", "CO", "UT", "NM")) %>% 
+  mutate(month_yr = ymd(paste(year(date), month(date), 1))) %>% 
+  #Determine the mean DSCI score/FIPS/month
+  group_by(month_yr, FIPS) %>% 
+  summarise(avg_DSCI = mean(DSCI), .groups = "drop_last") %>% 
+  summarise(avg_DSCI_US = mean(avg_DSCI))
+
+```
+
+```{r}
+
+#Mean centre the data so we can see how it's changed over time
+plot_data <- plot_data %>% 
+  mutate(centre_avg_DSCI_US = avg_DSCI_US - mean(avg_DSCI_US))
+
+warming_bars_palette <- c("#08306b",
+                          "#08519c",
+                          "#2171b5",
+                          "#4292c6",
+                          "#6baed6",
+                          "#9ecae1",
+                          "#c6dbef",
+                          "#deebf7",
+                          "#ffffff",
+                          "#fee0d2",
+                          "#fcbba1",
+                          "#fc9272",
+                          "#fb6a4a",
+                          "#ef3b2c",
+                          "#cb181d",
+                          "#a50f15",
+                          "#67000d")
+
+#Determine how many of the last 20 worst drought months are since 2020.
+worst_droughts <- plot_data %>% 
+  arrange(desc(centre_avg_DSCI_US)) %>% 
+  slice(1:20) %>% 
+  summarise(worst2020 = sum(year(month_yr) >= 2020)) %>% 
+  pull(worst2020)
+
+sw_drought <- ggplot(data = plot_data) +
+  geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US), colour = NA) +
+  scale_fill_gradientn(colours = warming_bars_palette,
+                       #These are extended so that DSCI can be compared
+                       limits = c(-350, 350),
+                       breaks = c(-350, 0, 350),
+                       labels = c("Lower drought score\nthan normal",
+                                  "Average drought score\n(2000-2022)", "Higher drought score\nthan normal"),
+                       guide = guide_colourbar(nbin = 300,
+                                               ticks.colour = "black", ticks.linewidth = 0.5,
+                                               frame.colour = "white")) +
+  scale_x_date(expand = c(0, 0), name = "AVG. DROUGHT SCORE\n(across all counties in the Southwest)",
+               breaks = seq.Date(as.Date("2000-06-01"),
+                                 as.Date("2022-06-01"), by = "2 year"), date_labels = "%Y") +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = "THE DROUGHT IN THE US SOUTHWEST IS THE WORST IN 2 DECADES",
+       subtitle = paste(worst_droughts, "of the worst 20 drought months have occurred since 2020"),
+       caption = "Data: www.drought.gov | Plot: @ldbailey255\nAmerican SW includes California, Nevada, Arizona, Colorado, Utah, & New Mexico") +
+  theme_classic() +
+  theme(axis.line = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(colour = "white"),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text(margin = margin(t = 20, b = 0),
+                                    colour = "white"),
+        plot.title = element_text(colour = "white"),
+        plot.subtitle = element_text(colour = "white"),
+        plot.caption = element_text(colour = "white", margin = margin(t = 20)),
+        legend.position = "bottom",
+        # legend.key.width = unit(1.5, units = "cm"),
+        legend.title = element_blank(), legend.text = element_text(colour = "white"),
+        legend.margin = margin(t = 0), legend.background = element_blank(),
+        plot.background = element_rect(fill = "grey10", colour = NA),
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20))
+
+sw_drought
+```
+
+Both are nice, but we'll use American SW (will make for nicer maps because area will be larger).
+
+## Plot 2: Map
+
+Extract US county shapefiles using naturalearth. Only do this for target states. Other states will be just state level.
+
+```{r}
+library(raster)
+county <- raster::getData("GADM", country = "USA", level = 2)
+county_sf <- sf::st_as_sf(county)
+#We only want counties for our SW states
+county_sf_SW <- county_sf %>% 
+  filter(NAME_1 %in% c("California", "Nevada", "Arizona", "Colorado", "Utah", "New Mexico")) %>% 
+  #simplify down to make it easier to plot
+  sf::st_simplify(dTolerance = 1e3)
+
+#Also get state boundaries to emphasise better
+state <- raster::getData("GADM", country = "USA", level = 1)
+state_sf <- sf::st_as_sf(state)
+#We only want our SW states
+state_sf_notSW <- state_sf %>% 
+  filter(NAME_1 %in% c("California", "Nevada", "Arizona", "Colorado", "Utah", "New Mexico")) %>% 
+  #simplify down to make it easier to plot
+  sf::st_simplify(dTolerance = 1e3)
+```
+
+Convert FIPS to usable format to join with polygons. We also will still centre all the country DSCI data so that is comparable to the warming bars.
+
+```{r}
+
+centre_value <- drought_fips %>% 
+  filter(State %in% c("CA", "AZ", "NV", "CO", "UT", "NM")) %>% 
+  mutate(month_yr = ymd(paste(year(date), month(date), 1))) %>% 
+  #Determine the mean DSCI score/FIPS/month
+  group_by(month_yr, FIPS) %>% 
+  summarise(avg_DSCI = mean(DSCI), .groups = "drop_last") %>% 
+  summarise(avg_DSCI_US = mean(avg_DSCI)) %>% 
+  summarise(centre_val = mean(avg_DSCI_US)) %>% 
+  pull(centre_val)
+
+plot_data_map <- drought_fips %>% 
+  filter(State %in% c("CA", "AZ", "NV", "CO", "UT", "NM")) %>% 
+  mutate(month_yr = ymd(paste(year(date), month(date), 1))) %>% 
+  #Determine the mean DSCI score/FIPS/month
+  group_by(month_yr, FIPS) %>% 
+  summarise(avg_DSCI = mean(DSCI) - centre_value, .groups = "drop") %>% 
+  mutate(state_code = stringr::str_extract(string = FIPS, pattern = "^[0-9]{2}"),
+         county_code = stringr::str_extract(string = FIPS, pattern = "[0-9]{3}$"))
+
+library(tidycensus)
+SW_counties <- tidycensus::fips_codes %>% 
+  filter(state_name %in% c("California", "Nevada", "Arizona", "Colorado", "Utah", "New Mexico")) %>% 
+  mutate(county = stringr::str_remove(pattern = " County", string = county))
+
+plot_data_map <- plot_data_map %>% 
+  left_join(dplyr::select(SW_counties, state_code, county_code, county), by = c("state_code", "county_code"))
+
+county_sf_SW_drought <- county_sf_SW %>%
+  #Use spelling De Baca not Debaca
+  mutate(NAME_2 = case_when(NAME_2 == "Debaca" ~ "De Baca",
+                            TRUE ~ NAME_2)) %>% 
+  left_join(plot_data_map, by = c("NAME_2" = "county"))
+```
+
+As an example, plot drought in last month of data (2022-06-01)
+
+```{r}
+ggplot() +
+  geom_sf(data = dplyr::filter(county_sf_SW_drought, month_yr == "2022-06-01"),
+          aes(fill = avg_DSCI)) +
+  geom_sf(data = state_sf_notSW, fill = NA, colour = "black", size = 1) +
+  scale_fill_gradientn(colours = warming_bars_palette,
+                       limits = c(-350, 350),
+                       breaks = c(-350, 0, 350),
+                       labels = c("Lower drought score\nthan normal",
+                                  "Average drought score\n(2000-2022)",
+                                  "Higher drought score\nthan normal"),
+                       guide = guide_colourbar(nbin = 100,
+                                               ticks.colour = "black",
+                                               ticks.linewidth = 0.5,
+                                               frame.colour = "white",
+                                               raster = TRUE)) +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        legend.text = element_text(colour = "white"),
+        legend.key.width = unit(2, units = "cm"),
+        plot.background = element_rect(fill = "grey10", colour = NA),
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20))
+```
+
+### Combine to show static
+
+```{r}
+
+library(patchwork)
+
+date <- as.Date("2020-01-01")
+
+map <- ggplot() +
+  geom_sf(data = dplyr::filter(county_sf_SW_drought, month_yr == date),
+          aes(fill = avg_DSCI)) +
+  geom_sf(data = state_sf_notSW, fill = NA, colour = "black", size = 1) +
+  scale_fill_gradientn(colours = warming_bars_palette,
+                       limits = c(-350, 350),
+                       breaks = c(-350, 0, 350),
+                       labels = c("Lower drought score\nthan normal",
+                                  "Average drought score\n(2000-2022)",
+                                  "Higher drought score\nthan normal"),
+                       guide = guide_colourbar(nbin = 300,
+                                               ticks.colour = "black", 
+                                               ticks.linewidth = 0.5,
+                                               frame.colour = "white",
+                                               title.position = "top",
+                                               title.hjust = 0.5),
+                       name = "AVG. DROUGHT SCORE\n(across all counties in the Southwest)") +
+  theme_void() +
+  theme(legend.position = "none",
+        plot.title = element_text(colour = "white"),
+        plot.subtitle = element_text(colour = "white"),
+        legend.text = element_text(colour = "white"),
+        legend.title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10", colour = NA),
+        plot.margin = margin(t = 40, r = 0, b = 0, l = 0))
+
+sw_drought <- ggplot(data = plot_data) +
+  geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US),
+           colour = NA) + 
+  geom_segment(aes(x = date, xend = date,
+                   y = 1.5, yend = 1),
+               arrow = arrow(length = unit(2, units = "mm")), colour = "white") +
+  scale_fill_gradientn(colours = warming_bars_palette,
+                       #These are extended so that DSCI can be compared
+                       limits = c(-350, 350),
+                       breaks = c(-350, 0, 350),
+                       labels = c("Lower drought score\nthan normal",
+                                  "Average drought score\n(2000-2022)", "Higher drought score\nthan normal")) +
+  scale_x_date(expand = c(0, 0),
+               breaks = seq.Date(as.Date("2000-06-01"),
+                                 as.Date("2022-06-01"), by = "2 year"), date_labels = "%Y") +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_equal(ratio = 900, clip = "off") +
+  theme_classic() +
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.text.x = element_text(colour = "white", size = 10),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        plot.caption = element_text(colour = "white", margin = margin(t = 20)),
+        legend.position = "none",
+        plot.background = element_rect(fill = "grey10", colour = NA),
+        panel.background = element_blank(),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0))
+
+map_grob <- ggplotGrob(map)
+stripes_grob <- ggplotGrob(sw_drought)
+
+ggplot() +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(limits = c(0, 0.85)) +
+  coord_equal() +
+  annotation_custom(grob = map_grob,
+                    ymin = 0.05, ymax = 1.1) +
+  annotation_custom(grob = stripes_grob,
+                    xmin = 0, xmax = 1,
+                    ymin = 0, ymax = 0.2) +
+  labs(title = "THE DROUGHT IN THE US SOUTHWEST IS THE WORST IN 2 DECADES",
+       subtitle = paste(worst_droughts, "of the worst 20 drought months have occurred since 2020"),
+       caption = "Data: www.drought.gov | Plot: @ldbailey255\nAmerican SW includes California, Nevada, Arizona, Colorado, Utah, & New Mexico") +
+  theme_void() +
+  theme(plot.background = element_rect(fill = "grey10", colour = NA),
+        plot.margin = margin(t = 0, r = 50, b = 0, l = 50),
+        plot.title = element_text(colour = "white"),
+        plot.subtitle = element_text(colour = "white"),
+        plot.caption = element_text(colour = "white"))
+
+```
+
+### Combine to show static
+
+```{r}
+
+library(patchwork)
+
+dates <- seq.Date(from = min(plot_data$month_yr),
+                  to = max(plot_data$month_yr), by = "month")
+
+labels <- data.frame(state = c("California", "Nevada", "Utah", "Colorado", "Arizona", "New\nMexico"),
+                     long = c(-124.880117, -118.535087, -112.514628, -107.338972, -116.056803, -102.809409),
+                     lat = c(35.957911, 42.302400, 42.302400, 41.366379, 31.938733, 34.310535)) %>% 
+  sf::st_as_sf(x = ., coords = c(2, 3), crs = sf::st_crs(county_sf_SW_drought))
+
+purrr::map(.x = dates, .f = function(date){
+  
+  map <- ggplot() +
+    geom_sf(data = dplyr::filter(county_sf_SW_drought, month_yr == date),
+            aes(fill = avg_DSCI)) +
+    geom_sf(data = state_sf_notSW, fill = NA, colour = "black", size = 1) +
+    geom_sf_text(data = labels, aes(label = state),
+                 colour = "white", size = 4.5, hjust = 0,
+                 family = "Miki") +
+    scale_fill_gradientn(colours = warming_bars_palette,
+                         limits = c(-350, 350),
+                         breaks = c(-350, 0, 350),
+                         guide = NULL) +
+    coord_sf(clip = "off") +
+    theme_void() +
+    theme(legend.position = "none",
+          plot.background = element_rect(fill = "grey10", colour = NA),
+          plot.margin = margin(t = 40, r = 0, b = 0, l = 0))
+  
+  sw_drought <- ggplot(data = plot_data) +
+    geom_col(aes(x = month_yr, y = 1, fill = centre_avg_DSCI_US),
+             colour = NA) + 
+    geom_segment(aes(x = date, xend = date,
+                     y = 1.5, yend = 1),
+                 arrow = arrow(length = unit(2, units = "mm")), colour = "white") +
+    scale_fill_gradientn(colours = warming_bars_palette,
+                         #These are extended so that DSCI can be compared to the county wide data on the map
+                         limits = c(-350, 350),
+                         breaks = c(-350, 0, 350)) +
+    scale_x_date(expand = c(0, 0),
+                 breaks = seq.Date(as.Date("2000-06-01"),
+                                   as.Date("2022-06-01"), by = "2 year"), date_labels = "%Y") +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_equal(ratio = 900, clip = "off") +
+    theme_classic() +
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.text.x = element_text(colour = "white", size = 10, family = "Miki"),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          legend.position = "none",
+          plot.background = element_rect(fill = "grey10", colour = NA),
+          panel.background = element_blank(),
+          plot.margin = margin(t = 0, r = 0, b = 0, l = 0))
+  
+  map_grob <- ggplotGrob(map)
+  stripes_grob <- ggplotGrob(sw_drought)
+  
+  ggplot() +
+    scale_x_continuous(limits = c(0, 1)) +
+    scale_y_continuous(limits = c(0, 0.85)) +
+    coord_equal(clip = "off") +
+    annotation_custom(grob = stripes_grob,
+                      xmin = 0.1, xmax = 0.9,
+                      ymin = 0, ymax = 0.2) +
+    annotation_custom(grob = map_grob,
+                      ymin = 0.05, ymax = 1.1) +
+    #ADD TEXT FOR BLUE YEAR
+    geom_segment(aes(x = 0.04, xend = 0.09,
+                     y = 0.1, yend = 0.1),
+                 size = 0.75, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_segment(aes(x = 0.04, xend = 0.04,
+                     y = 0.185, yend = 0.1),
+                 size = 0.75, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_richtext(aes(x = 0.04, y = 0.15,
+                      label = "<span style='color:#08519c;font-family:Alfa_Slab_One'>BLUE</span><span style='color:white;font-family:Miki'> years<br>have below<br>average drought</span>"),
+                  hjust = 1, fill = NA, label.colour = NA) +
+    #ADD TEXT FOR RED YEAR
+    geom_segment(aes(x = 1 - 0.04, xend = 1 - 0.09,
+                     y = 0.1, yend = 0.1),
+                 size = 0.75, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_segment(aes(x = 1 - 0.04, xend = 1 - 0.04,
+                     y = 0.185, yend = 0.1),
+                 size = 0.75, colour = "white",
+                 linejoin = "round", lineend = "round") +
+    geom_richtext(aes(x = 1 - 0.04, y = 0.15,
+                      label = "<span style='color:#a50f15;font-family:Alfa_Slab_One'>RED</span><span style='color:white;font-family:Miki'> years<br>have above<br>average drought</span>"),
+                  hjust = 0, fill = NA, label.colour = NA) +
+    labs(title = "DROUGHT IN THE US SOUTHWEST IS THE\nWORST IN OVER 2 DECADES",
+         subtitle = paste(worst_droughts, "of the worst 20 drought months have occurred since 2020"),
+         caption = "Data: www.drought.gov | Plot: @ldbailey255\nAmerican SW includes California, Nevada, Arizona, Colorado, Utah, & New Mexico") +
+    theme_void() +
+    theme(plot.background = element_rect(fill = "grey10", colour = NA),
+          plot.margin = margin(t = 0, r = 50, b = 0, l = 50),
+          plot.title = element_text(colour = "white", size = 19, hjust = 0, family = "Alfa_Slab_One"),
+          plot.subtitle = element_text(colour = "white", size = 14, hjust = 0, family = "Miki"),
+          plot.caption = element_text(colour = "white", hjust = 1, family = "Cutive_Mono"))
+  
+  ggsave(here(glue::glue("./plots/2022/Week24_gif/Week24_map_{date}.png", date = date)),
+         height = 7.5, width = 9.5, dpi = 150)
+  
+  return()
+  
+})
+
+```
+
+```{r}
+
+library(magick)
+imgs <- list.files(here("./plots/2022/Week24_gif"),
+                  pattern = ".png", full.names = TRUE)
+
+## list file names and read in
+img_list <- lapply(imgs, image_read)
+
+## join the images together
+img_joined <- image_join(img_list)
+
+## animate at 2 frames per second
+img_animated <- image_animate(img_joined, fps = 10, loop = 0,
+                              optimize = TRUE)
+
+## save to disk
+image_write(image = img_animated,
+            path = here("./plots/2022/Week24_map.gif"))
+
+```
