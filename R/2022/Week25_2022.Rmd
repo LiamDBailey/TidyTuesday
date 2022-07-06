@@ -694,7 +694,7 @@ ggplot() +
                size = 0.5, colour = "grey10") +
   #Titles
   labs(title = "GEOGRAPHY OF AMERICAN SLAVERY",
-       subtitle = "Slavery was prolific in the South before slavery was abolished in 1865",
+       subtitle = "Slavery was prolific in the South before it was abolished in 1865",
        caption = "Data: US Census Archives | Plot: @ldbailey255<br>Geographic groups represent US Census regions<br>Nebraska, Oklahoma, N. Dakota and S. Dakota were not states during this period so were excluded from the maps") +
   #Theme
   theme_void() +
