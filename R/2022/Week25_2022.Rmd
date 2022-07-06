@@ -1,0 +1,709 @@
+---
+title: "Week25_2022"
+author: "Liam D. Bailey"
+date: '2022-07-05'
+output: html_document
+---
+
+```{r, include = FALSE}
+
+#Options
+
+```
+
+## Load data
+
+```{r}
+
+juneteenth_data <- tidytuesdayR::tt_load(2022, week = 25)
+
+```
+
+## Load required packages
+
+```{r, message=FALSE}
+
+library(ggplot2) #For plotting
+library(dplyr) #For data wrangling
+library(patchwork) #To combine ggplot objects
+library(showtext) #For custom fonts
+library(gt) #For creating nice tables
+library(scales) #For creating nice palettes
+library(lubridate) #For working with dates
+library(ggtext) #For richtext
+library(here) #For easier relative paths
+library(skimr) #For exploring data
+
+showtext::showtext_auto()
+sysfonts::font_add_google(name = "Quicksand", family = "Quicksand")
+sysfonts::font_add_google(name = "Source Code Pro", family = "Source_Code_Pro")
+sysfonts::font_add_google(name = "Cherry Swash", family = "Cherry_Swash")
+sysfonts::font_add_google(name = "Alfa Slab One", family = "Alfa_Slab_One")
+sysfonts::font_add_google(name = "Cutive Mono", family = "Cutive_Mono")
+font_add(family = "Miki",
+         regular = "KontrapunktMiki-Regular.otf",
+         bold = "KontrapunktMiki-Bold.otf")
+#Trial using the W E B Du Bois font from https://www.vocaltype.co/buy-du-bois
+font_add(family = "DuBois",
+         regular = "VTCDuBoisTrial-Regular.otf",
+         bold = "VTCDuBoisTrial-BoldWide.otf")
+
+```
+
+## Explore data
+
+### Census data
+
+```{r}
+census <- juneteenth_data$census
+skim(census)
+```
+
+- We have data from 1790 - 1870.
+- Have data on white, black(enslaved), and black(free) in all years
+- Region is always available, but 'division' is sometimes missing. What is 'division'?
+
+```{r}
+unique(census$division) #Smaller breakdown of regions
+```
+
+I think that we have totals for the whole of US, each region and each sub-division.
+
+## Plot data
+
+### Census data
+
+#### Plot idea 1: Combined bar graph showing proportion of slaves v. free in Union v. Confederacy
+
+```{r}
+subset_data <- census %>% 
+  #Remove US total and West (we want to compare difference b/w confederate and non-confederate)
+  #Don't worry about breaking down by division, so keep this as NA
+  filter(!region %in% c("USA Total", "West") & is.na(division)) %>% 
+  #Group Northeast and Midwest as 'Northern States'
+  #Keep 'South' as is
+  #This is not *exactly* right, because some northern states are in the 'South' region (e.g. Maryland, Delaware)
+  mutate(civil_war_state = case_when(region %in% c("Northeast", "Midwest") ~ "Union",
+                                     region == "South" ~ "South")) %>% 
+  #group and determine number of black, free black, enslaved black
+  group_by(civil_war_state, year) %>% 
+  summarise(black = sum(black),
+            black_free = sum(black_free),
+            black_enslaved = sum(black_slaves), .groups = "drop") %>% 
+  #Percentage for each group
+  mutate(free_perc = (black_free/black)*100,
+         enslaved_perc = (black_enslaved/black)*100)
+```
+
+```{r}
+
+library(ggnewscale)
+ggplot(data = subset_data) +
+  #Create black and white rectangles behind plot
+  geom_rect(aes(xmin = -Inf, xmax = Inf,
+                ymin = 0, ymax = -Inf), fill = "grey10") +
+  geom_rect(aes(xmin = -Inf, xmax = Inf,
+                ymin = 0, ymax = Inf), fill = "grey90") +
+  #Add enslaved data
+  geom_col(aes(x = year, y = -enslaved_perc,
+               group = civil_war_state,
+               fill = civil_war_state),
+           position = position_dodge(width = 8),
+           colour = "grey10",
+           width = 7) +
+  scale_fill_manual(values = c("#610519", "#002766")) +
+  # geom_text(aes(x = year, y = -enslaved_perc - 3,
+  #               label = paste0(round(enslaved_perc), "%"),
+  #               group = civil_war_state),
+  #           colour = "white", position = position_dodge(width = 8),
+  #           size = 3) +
+  #Add free data
+  new_scale_fill() +
+  geom_col(aes(x = year, y = free_perc,
+               group = civil_war_state,
+               fill = civil_war_state),
+           position = position_dodge(width = 8),
+           colour = "grey10",
+           width = 7) +
+  scale_fill_manual(values = c("#910825", "#003b99")) +
+  # geom_text(aes(x = year, y = free_perc + 3,
+  #               label = paste0(round(free_perc), "%"),
+  #               group = civil_war_state),
+  #           colour = "black", position = position_dodge(width = 8),
+  #           size = 3) +
+  #Add horizontal line at 0
+  geom_hline(yintercept = 0, colour = "grey10", size = 0.5) +
+  #Adjust scales
+  scale_x_continuous(breaks = seq(1790, 1870, 10), position = "top",
+                     limits = c(1785, 1875)) +
+  scale_y_continuous(breaks = c(-100, -50, 0, 50, 100),
+                     labels = c("100%", "50%", "0%", "50%", "100%")) +
+  #Theme adjustment
+  theme_classic() +
+  theme(axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 15, colour = "grey10"),
+        axis.title.y = element_blank(),
+        axis.text.y = element_text(size = 12, colour = "grey10"),
+        legend.position = "none",
+        plot.background = element_rect(fill = "#e7dbc0"))
+```
+
+It's fine, but not super convincing. Also grouping NE and Midwest together doesn't give a complete picture.
+
+#### Plot idea 2: For each region with state legend
+
+```{r}
+subset_data <- census %>% 
+  #Remove US total and West (we want to compare difference b/w confederate and non-confederate)
+  #Don't worry about breaking down by division, so keep this as NA
+  filter(!region %in% c("USA Total", "West") & is.na(division)) %>% 
+  #group and determine number of black, free black, enslaved black per region
+  group_by(region, year) %>% 
+  summarise(black = sum(black),
+            black_free = sum(black_free),
+            black_enslaved = sum(black_slaves), .groups = "drop") %>% 
+  #Percentage for each group
+  mutate(free_perc = (black_free/black)*100,
+         enslaved_perc = (black_enslaved/black)*100)
+```
+
+```{r}
+ggplot(data = subset_data) +
+  #Create black and white rectangles behind plot
+  geom_rect(aes(xmin = -Inf, xmax = Inf,
+                ymin = 0, ymax = -Inf), fill = "grey10") +
+  geom_rect(aes(xmin = -Inf, xmax = Inf,
+                ymin = 0, ymax = Inf), fill = "grey90") +
+  #Add enslaved data
+  geom_col(aes(x = year, y = -enslaved_perc,
+               group = region,
+               fill = region),
+           position = position_dodge(width = 8),
+           colour = "grey10",
+           width = 7) +
+  geom_text(aes(x = year, y = -enslaved_perc - 3,
+                label = paste0(round(enslaved_perc), "%"),
+                group = region),
+            colour = "white", position = position_dodge(width = 8),
+            size = 3) +
+  #Add free data
+  geom_col(aes(x = year, y = free_perc,
+               group = region,
+               fill = region),
+           position = position_dodge(width = 8),
+           colour = "grey10",
+           width = 7) +
+  geom_text(aes(x = year, y = free_perc + 3,
+                label = paste0(round(free_perc), "%"),
+                group = region),
+            colour = "black", position = position_dodge(width = 8),
+            size = 3) +
+  #Add horizontal line at 0
+  geom_hline(yintercept = 0, colour = "grey10", size = 0.5) +
+  #Adjust scales
+  scale_x_continuous(breaks = seq(1790, 1870, 10), position = "top",
+                     limits = c(1785, 1875)) +
+  scale_y_continuous(breaks = c(-100, -50, 0, 50, 100),
+                     labels = c("100%", "50%", "0%", "50%", "100%")) +
+  #Facet
+  facet_wrap(facets = ~region, ncol = 1) +
+  #Theme adjustment
+  theme_classic() +
+  theme(axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 15, colour = "grey10"),
+        axis.title.y = element_blank(),
+        axis.text.y = element_text(size = 12, colour = "grey10"),
+        legend.position = "none",
+        plot.background = element_rect(fill = "#e7dbc0"))
+```
+
+Try same plots but individual per region and flipped
+
+```{r}
+plot_data <- subset_data %>% 
+  filter(region == "Midwest")
+
+midwest_bars <- ggplot() +
+  #Create black and white rectangles behind plot
+  # geom_rect(aes(xmin = -Inf, xmax = Inf,
+  #               ymin = 0, ymax = -Inf), fill = "grey10") +
+  # geom_rect(aes(xmin = -Inf, xmax = Inf,
+  #               ymin = 0, ymax = Inf), fill = "grey90") +
+  #Add enslaved data
+  geom_col(data = plot_data,
+           aes(x = year, y = -enslaved_perc),
+           position = position_dodge(width = 8),
+           fill = "grey10",
+           colour = "grey10",
+           width = 7) +
+  geom_richtext(data = plot_data,
+            aes(x = year, y = -enslaved_perc - 7,
+                label = paste0(round(enslaved_perc), "<span style='font-family:Cutive_Mono'>%</span>")),
+            colour = "black",
+            size = 2.5, hjust = 1,
+            family = "DuBois",
+            label.colour = NA, fill = NA) +
+  #Add free data
+  geom_col(data = plot_data,
+           aes(x = year, y = free_perc),
+           position = position_dodge(width = 8),
+           fill = "grey50",
+           colour = "grey50",
+           width = 7) +
+  geom_richtext(data = plot_data,
+            aes(x = year, y = free_perc + 7,
+                label = paste0(round(free_perc), "<span style='font-family:Cutive_Mono'>%</span>")),
+            colour = "black",
+            size = 2.5, hjust = 0,
+            family = "DuBois",
+            label.colour = NA, fill = NA) +
+  #Add additional text specifying sections
+  geom_text(aes(x = c(1785),
+                y = c(-5),
+                label = c("ENSLAVED")),
+            colour = "grey10", hjust = 1,
+            family = "DuBois", fontface = "bold",
+            size = 3) +
+  geom_text(aes(x = c(1785),
+                y = c(5),
+                label = c("FREE")),
+            colour = "grey50", hjust = 0,
+            family = "DuBois", fontface = "bold",
+            size = 3) +
+  #Add horizontal line at 0
+  geom_hline(yintercept = 0, colour = "grey10", size = 0.5) +
+  #Adjust scales
+  scale_x_reverse(breaks = seq(1790, 1870, 10),
+                  limits = rev(c(1785, 1875))) +
+  scale_y_continuous(breaks = c(-100, -50, 0, 50, 100),
+                     labels = paste0(c("100", "50", "0", "50", "100"),
+                                     "<span style='font-family:Cutive_Mono'>%</span>"),
+                     limits = c(-110, 110)) +
+  #Flip
+  coord_flip(clip = "off") +
+  #Theme adjustment
+  theme_classic() +
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_markdown(size = 10, colour = "grey10",
+                                   family = "DuBois"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        legend.position = "none",
+        plot.background = element_blank(),
+        panel.background = element_blank())
+
+midwest_bars
+
+```
+
+```{r}
+plot_data <- subset_data %>% 
+  filter(region == "Northeast")
+
+NE_bars <- ggplot(data = plot_data) +
+  #Create black and white rectangles behind plot
+  # geom_rect(aes(xmin = -Inf, xmax = Inf,
+  #               ymin = 0, ymax = -Inf), fill = "grey10") +
+  # geom_rect(aes(xmin = -Inf, xmax = Inf,
+  #               ymin = 0, ymax = Inf), fill = "grey90") +
+  #Add enslaved data
+  geom_col(aes(x = year, y = -enslaved_perc),
+           position = position_dodge(width = 8),
+           fill = "grey10",
+           colour = "grey10",
+           width = 7) +
+  geom_richtext(aes(x = year, y = -enslaved_perc - 7,
+                label = paste0(round(enslaved_perc), "<span style='font-family:Cutive_Mono'>%</span>")),
+            colour = "black",
+            size = 2.5, hjust = 1,
+            family = "DuBois",
+            label.colour = NA, fill = NA) +
+  #Add free data
+  geom_col(aes(x = year, y = free_perc),
+           position = position_dodge(width = 8),
+           fill = "grey50",
+           colour = "grey50",
+           width = 7) +
+  geom_richtext(aes(x = year, y = free_perc + 7,
+                label = paste0(round(free_perc), "<span style='font-family:Cutive_Mono'>%</span>")),
+            colour = "black",
+            size = 2.5, hjust = 0,
+            family = "DuBois",
+            label.colour = NA, fill = NA) +
+  #Add horizontal line at 0
+  geom_hline(yintercept = 0, colour = "grey10", size = 0.5) +
+  #Adjust scales
+  scale_x_reverse(breaks = seq(1790, 1870, 10),
+                  limits = rev(c(1785, 1875))) +
+  scale_y_continuous(breaks = c(-100, -50, 0, 50, 100),
+                     labels = paste0(c("100", "50", "0", "50", "100"),
+                                     "<span style='font-family:Cutive_Mono'>%</span>"),
+                     limits = c(-110, 110)) +
+  #Flip
+  coord_flip(clip = "off") +
+  #Theme adjustment
+  theme_classic() +
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_markdown(size = 10, colour = "grey10",
+                                   family = "DuBois"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        legend.position = "none",
+        plot.background = element_blank(),
+        panel.background = element_blank())
+
+NE_bars
+
+```
+
+```{r}
+plot_data <- subset_data %>% 
+  filter(region == "South")
+
+South_bars <- ggplot(data = plot_data) +
+  #Create black and white rectangles behind plot
+  # geom_rect(aes(xmin = -Inf, xmax = Inf,
+  #               ymin = 0, ymax = -Inf), fill = "grey10") +
+  # geom_rect(aes(xmin = -Inf, xmax = Inf,
+  #               ymin = 0, ymax = Inf), fill = "grey90") +
+  #Add enslaved data
+  geom_col(aes(x = year, y = -enslaved_perc),
+           position = position_dodge(width = 8),
+           fill = "grey10",
+           colour = "grey10",
+           width = 7) +
+  geom_richtext(aes(x = year, y = -enslaved_perc - 7,
+                label = paste0(round(enslaved_perc), "<span style='font-family:Cutive_Mono'>%</span>")),
+            colour = "black",
+            size = 2.5, hjust = 1,
+            family = "DuBois",
+            label.colour = NA, fill = NA) +
+  #Add free data
+  geom_col(aes(x = year, y = free_perc),
+           position = position_dodge(width = 8),
+           fill = "grey50",
+           colour = "grey50",
+           width = 7) +
+  geom_richtext(aes(x = year, y = free_perc + 7,
+                label = paste0(round(free_perc), "<span style='font-family:Cutive_Mono'>%</span>")),
+            colour = "black",
+            size = 2.5, hjust = 0,
+            family = "DuBois",
+            label.colour = NA, fill = NA) +
+  #Add horizontal line at 0
+  geom_hline(yintercept = 0, colour = "grey10", size = 0.5) +
+  #Adjust scales
+  scale_x_reverse(breaks = seq(1790, 1870, 10),
+                  limits = rev(c(1785, 1875))) +
+  scale_y_continuous(breaks = c(-100, -50, 0, 50, 100),
+                     labels = paste0(c("100", "50", "0", "50", "100"),
+                                     "<span style='font-family:Cutive_Mono'>%</span>"),
+                     limits = c(-110, 110)) +
+  #Flip
+  coord_flip(clip = "off") +
+  #Theme adjustment
+  theme_classic() +
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_markdown(size = 10, colour = "grey10",
+                                   family = "DuBois"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_markdown(size = 10, colour = "grey10",
+                                   family = "DuBois"),
+        axis.line.x = element_blank(),
+        legend.position = "none",
+        plot.background = element_blank(),
+        panel.background = element_blank())
+
+South_bars
+
+```
+
+Looks ok. Create separate maps for each of the regions using polygons we got last time.
+
+```{r, cache=TRUE}
+state <- raster::getData("GADM", country = "USA", level = 1)
+state_sf <- sf::st_as_sf(state)
+
+slave_states <- data.frame(state = c("Kansas", "Missouri", "Iowa", "Minnesota",
+                                     "Wisconsin", "Illinois", "Indiana",
+                                     "Michigan", "Ohio", "Pennsylvania", "New York", "Vermont",
+                                     "Connecticut", "New Jersey", "Rhode Island",
+                                     "Maine",
+                                     "New Hampshire", "Massachusetts", "Texas", "Arkansas",
+                                     "Louisiana",
+                                     "Mississippi", "Alabama", "Tennessee", "Kentucky",
+                                     "Georgia", "Florida", "South Carolina",
+                                     "North Carolina", "Virginia", "West Virginia",
+                                     "Maryland", "Delaware", "District of Columbia"),
+                           side = c("Free", "Slave", "Free", "Free",
+                                    "Free", "Free", "Free",
+                                    "Free", "Free", "Free", "Free", "Free",
+                                    "Free", "Free", "Free",
+                                    "Free",
+                                    "Free", "Free", "Slave", "Slave",
+                                    "Slave", "Slave", "Slave", "Slave",
+                                    "Slave", "Slave", "Slave",
+                                    "Slave", "Slave", "Slave", "Slave",
+                                    "Slave", "Slave", NA))
+
+#Separate into our different regions
+#For midwest, we exclude states that didn't exist during civil war
+#This includes: Dakotas, Nebraska (made a state in 1867)
+midwest <- state_sf %>% 
+  filter(NAME_1 %in% c("Kansas", "Missouri", "Iowa", "Minnesota",
+                       "Wisconsin", "Illinois", "Indiana",
+                       "Michigan", "Ohio")) %>% 
+  left_join(slave_states, by = c("NAME_1" = "state")) %>% 
+  #simplify down to make it easier to plot
+  sf::st_simplify(dTolerance = 1e3)
+
+northeast <- state_sf %>% 
+  filter(NAME_1 %in% c("Pennsylvania", "New York", "Vermont",
+                       "Connecticut", "New Jersey", "Rhode Island",
+                       "Maine",
+                       "New Hampshire", "Massachusetts")) %>% 
+  left_join(slave_states, by = c("NAME_1" = "state")) %>% 
+  #simplify down to make it easier to plot
+  sf::st_simplify(dTolerance = 1e3)
+
+#Remove Oklahoma (not state yet)
+south <- state_sf %>% 
+  filter(NAME_1 %in% c("Texas", "Arkansas", "Louisiana",
+                       "Mississippi", "Alabama", "Tennessee", "Kentucky",
+                       "Georgia", "Florida", "South Carolina",
+                       "North Carolina", "Virginia", "West Virginia",
+                       "Maryland", "Delaware", "District of Columbia")) %>% 
+  left_join(slave_states, by = c("NAME_1" = "state")) %>% 
+  #simplify down to make it easier to plot
+  sf::st_simplify(dTolerance = 1e3)
+
+midwest_map <- ggplot() +
+  geom_sf(data = midwest,
+          aes(fill = side),
+          colour = "grey60", size = 0.25) +
+  scale_fill_manual(values = c("#003b99", "#920725")) +
+  theme_void() +
+  theme(legend.position = "none")
+
+northeast_map <- ggplot() +
+  geom_sf(data = northeast, 
+          aes(fill = side),
+          colour = "grey60", size = 0.25) +
+  scale_fill_manual(values = c("#003b99")) +
+  theme_void() +
+  theme(legend.position = "none")
+
+south_map <- ggplot() +
+  geom_sf(data = south, 
+          aes(fill = side),
+          colour = "grey60", size = 0.25) +
+  scale_fill_manual(values = c("#920725")) +
+  theme_void() +
+  theme(legend.position = "none")
+
+```
+
+Create a timeline to put at the bottom
+
+```{r}
+timeline <- ggplot() +
+  geom_segment(aes(x = as.Date("1600-01-01"), xend = as.Date("1870-01-01"), y = 0.5, yend = 0.5),
+               size = 2, colour = "grey10") +
+  #Independence
+  geom_segment(aes(x = as.Date("1776-07-04"), xend = as.Date("1776-07-04"),
+                   y = 0.5, yend = 0.8)) +
+  geom_richtext(aes(x = as.Date("1776-07-04"),
+                    y = 0.75,
+                    label = "<span style='font-size:15px'>**July 4, 1776**</span><br>Declaration of independence"),
+                hjust = 0, family = "DuBois",
+                label.colour = NA, fill = NA) +
+  #Abolish the slave trade
+  geom_segment(aes(x = as.Date("1808-01-01"), xend = as.Date("1808-01-01"),
+                   y = 0.5, yend = 0.2)) +
+  geom_richtext(aes(x = as.Date("1808-01-01"),
+                    y = 0.275,
+                    label = "<span style='font-size:15px'>**January 1, 1808**</span><br>Atlantic slave trade abolished<br>*Domestic* slave trade continues"),
+                hjust = 1, family = "DuBois",
+                label.colour = NA, fill = NA) +
+  #Confederacy established
+  geom_segment(aes(x = as.Date("1861-01-01"), xend = as.Date("1861-01-01"),
+                   y = 0.5, yend = 0.2)) +
+  geom_richtext(aes(x = as.Date("1861-01-01"),
+                    y = 0.275,
+                    label = "<span style='font-size:15px'>**February, 1861**</span><br>Confederate slave states<br>break from the Union"),
+                hjust = 1, family = "DuBois",
+                label.colour = NA, fill = NA) +
+  #Emancipation
+  geom_segment(aes(x = as.Date("1865-12-01"), xend = as.Date("1865-12-01"),
+                   y = 0.5, yend = 0.8)) +
+  geom_richtext(aes(x = as.Date("1865-12-01"),
+                    y = 0.725,
+                    label = "<span style='font-size:15px'>**December, 1865**</span><br>The 13th Amendment<br>abolishes slavery"),
+                hjust = 1, family = "DuBois",
+                label.colour = NA, fill = NA) +
+  scale_y_continuous(limits = c(0.1, 0.9)) +
+  scale_x_date(breaks = seq(as.Date("1600-01-01"), as.Date("1870-01-01"), "10 years"),
+               date_labels = "%Y") +
+  coord_equal(ratio = 12000) +
+  labs(title = "TIMELINE OF AMERICAN SLAVERY") +
+  theme_void() +
+  theme(panel.background = element_blank(),
+        plot.background = element_blank(),
+        axis.text.x = element_text(size = 10, colour = "grey10",
+                                   family = "DuBois"),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        plot.title = element_text(size = 15, colour = "black", family = "DuBois", face = "bold"))
+```
+
+Combine altogether as grobs
+
+```{r, warning = FALSE}
+
+midwest_bars_grob <- ggplotGrob(midwest_bars)
+midwest_map_grob <- ggplotGrob(midwest_map)
+
+south_bars_grob <- ggplotGrob(South_bars)
+south_map_grob <- ggplotGrob(south_map)
+
+northeast_bars_grob <- ggplotGrob(NE_bars)
+northeast_map_grob <- ggplotGrob(northeast_map)
+
+timeline_grob <- ggplotGrob(timeline)
+
+```
+
+Make complete plot
+
+```{r}
+
+ggplot() +
+  scale_x_continuous(limits = c(0, 2.25)) +
+  scale_y_continuous(limits = c(-0.1, 1.1)) +
+  coord_fixed(ratio = 1, clip = "off") +
+  #Midest
+  annotation_custom(grob = midwest_map_grob,
+                    xmin = 0, xmax = 0.5,
+                    ymin = 0.6, ymax = 1) +
+  annotation_custom(grob = midwest_bars_grob,
+                    xmin = 1.2, xmax = 1.8,
+                    ymin = 0.7, ymax = 1.1) +
+  #NE
+  annotation_custom(grob = northeast_map_grob,
+                    xmin = 0.6, xmax = 1.1,
+                    ymin = 0.55, ymax = 0.95) +
+  annotation_custom(grob = northeast_bars_grob,
+                    xmin = 1.2, xmax = 1.8,
+                    ymin = 0.3, ymax = 0.7) +
+  #South
+  annotation_custom(grob = south_map_grob,
+                    xmin = 0, xmax = 0.9,
+                    ymin = -0.2, ymax = 0.7) +
+  annotation_custom(grob = south_bars_grob,
+                    xmin = 1.2, xmax = 1.8,
+                    ymin = -0.1, ymax = 0.3) +
+  #Add lines and label midwest
+  geom_segment(aes(y = 0.8, yend = 0.95,
+                   x = 0.25, xend = 0.25),
+               size = 1.5, colour = "grey10",
+               linejoin = "round", lineend = "round") +
+  geom_segment(aes(y = 0.95, yend = 0.95,
+                   x = 0.25, xend = 1.2),
+               size = 1.5, colour = "grey10",
+               linejoin = "round") +
+  geom_text(aes(y = 0.975, x = 1.2, label = "MIDWEST"),
+            size = 5, hjust = 1, family = "DuBois", fontface = "bold") +
+  geom_point(aes(x = 0.25, y = 0.8),
+             shape = 21, colour = "black",
+             fill = "white", stroke = 2,
+             size = 5) +
+  #Add lines NE
+  geom_segment(aes(y = 0.75, yend = 0.55,
+                   x = 0.9, xend = 0.9),
+               size = 1.5, colour = "grey10",
+               linejoin = "round", lineend = "round") +
+  geom_segment(aes(y = 0.55, yend = 0.55,
+                   x = 0.9, xend = 1.2),
+               size = 1.5, colour = "grey10",
+               linejoin = "round") +
+  geom_text(aes(y = 0.525, x = 1.2, label = "NORTHEAST"),
+            size = 5, hjust = 1, family = "DuBois", fontface = "bold") +
+  geom_point(aes(x = 0.9, y = 0.75),
+             shape = 21, colour = "black",
+             fill = "white", stroke = 2,
+             size = 5) +
+  #Add lines South
+  geom_segment(aes(y = 0.25, yend = 0.1,
+                   x = 0.45, xend = 0.45),
+               size = 1.5, colour = "grey10",
+               linejoin = "round", lineend = "round") +
+  geom_segment(aes(y = 0.1, yend = 0.1,
+                   x = 0.45, xend = 1.2),
+               size = 1.5, colour = "grey10",
+               linejoin = "round") +
+  geom_text(aes(y = 0.075, x = 1.2, label = "SOUTH"),
+            size = 5, hjust = 1, family = "DuBois", fontface = "bold") +
+  geom_point(aes(x = 0.45, y = 0.25),
+             shape = 21, colour = "black",
+             fill = "white", stroke = 2,
+             size = 5) +
+  #Explain slave v. non-slave states
+  geom_segment(aes(y = 0.675, yend = 0.51,
+                   x = 0.1, xend = 0.1),
+               size = 0.75, colour = "grey10") +
+  geom_text(aes(x = 0.09, y = 0.55,
+                label = "Free\nstates"),
+            hjust = 1, colour = "#003b99",
+            family = "DuBois", fontface = "bold") +
+  geom_segment(aes(y = 0.675, yend = 0.51,
+                   x = 0.2, xend = 0.2),
+               size = 0.75, colour = "grey10") +
+  geom_text(aes(x = 0.21, y = 0.55,
+                label = "Slave\nstates"),
+            hjust = 0, colour = "#920725",
+            family = "DuBois", fontface = "bold") +
+  #Add info about each region
+  geom_richtext(aes(x = 1.85, y = 0.5,
+                    label = "The Northeast <span style='color:#003b99;font-size:15px'>**Free states**</span><br>had almost no enslaved Black<br>population by 1830"),
+                size = 3.5, hjust = 0,
+                label.colour = NA, fill = NA, family = "DuBois") +
+  geom_richtext(aes(x = 1.85, y = 0.15,
+                    label = "Southern <span style='color:#920725;font-size:15px'>**Slave states**</span><br>had almost no free Black<br>population until after the Civil War"),
+                size = 3.5, hjust = 0,
+                label.colour = NA, fill = NA, family = "DuBois") +
+  geom_richtext(aes(x = 1.85, y = 0.9,
+                    label = "With one <span style='color:#920725;font-size:15px'>**Slave state**</span><span style='font-family:Cutive_Mono'>(</span>Missouri<span style='font-family:Cutive_Mono'>)</span><br>the Midwest still had<br>a substaintial enslaved<br>population before 1870"),
+                size = 3.5, hjust = 0,
+                label.colour = NA, fill = NA, family = "DuBois") +
+  #Add vertical line across all plots
+  geom_segment(aes(x = 1.543, xend = 1.543,
+                   y = -0.05, yend = 1.0825),
+               size = 0.5, colour = "grey10") +
+  #Titles
+  labs(title = "GEOGRAPHY OF AMERICAN SLAVERY",
+       subtitle = "Slavery was prolific in the South before slavery was abolished in 1865",
+       caption = "Data: US Census Archives | Plot: @ldbailey255<br>Geographic groups represent US Census regions<br>Nebraska, Oklahoma, N. Dakota and S. Dakota were not states during this period so were excluded from the maps") +
+  #Theme
+  theme_void() +
+  theme(panel.background = element_rect(fill = "#e7dbc0", colour = NA),
+        plot.background = element_rect(fill = "#e7dbc0", colour = NA),
+        plot.title = element_text(size = 25, colour = "black", family = "DuBois", face = "bold"),
+        plot.subtitle = element_markdown(size = 18, colour = "black", family = "DuBois"),
+        plot.caption = element_markdown(size = 9, colour = "black", family = "Cutive_Mono"))
+
+ggsave(filename = here("./plots/2022/Week25.png"), width = 12, height = 7, dpi = 600)
+
+```
