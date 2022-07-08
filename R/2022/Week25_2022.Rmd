@@ -40,10 +40,20 @@ sysfonts::font_add_google(name = "Source Code Pro", family = "Source_Code_Pro")
 sysfonts::font_add_google(name = "Cherry Swash", family = "Cherry_Swash")
 sysfonts::font_add_google(name = "Alfa Slab One", family = "Alfa_Slab_One")
 sysfonts::font_add_google(name = "Cutive Mono", family = "Cutive_Mono")
+
+### NOTE ###
+#The below fonts are custom fonts installed on my computer locally
+#They will not work on your system by default!
+
+#If you want to use them in the plot you'll need to download the .otf files 
+#and add them into the font search path where sysfonts can find them.
+#Find your current font search paths (and add new paths) using `sysfonts::font_paths()`
+
+#Download here https://www.kontrapunkt.com/typetester
 font_add(family = "Miki",
          regular = "KontrapunktMiki-Regular.otf",
          bold = "KontrapunktMiki-Bold.otf")
-#Trial using the W E B Du Bois font from https://www.vocaltype.co/buy-du-bois
+#Download trial font here https://www.vocaltype.co/buy-du-bois
 font_add(family = "DuBois",
          regular = "VTCDuBoisTrial-Regular.otf",
          bold = "VTCDuBoisTrial-BoldWide.otf")
