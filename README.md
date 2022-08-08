@@ -21,6 +21,7 @@ Quick Link
 
 <!-- toc -->
 * **2022**
+  - 2022/Week 31 [:frog: Movement of frogs in Crane Prairie Reservoir, USA](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week31.png)
   - 2022/Week 25 [:us: History of US slavery historic census data](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week25.png)
   - 2022/Week 24 [:desert: Drought patterns in the US Southwest](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week24_map.gif)
   - 2022/Week 22 [:-1: Reputation of top US companies](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week22.png)
@@ -47,6 +48,12 @@ Quick Link
 <!-- tocstop -->
 
 </details>
+
+***
+
+### [2022/Week 31](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week31.png) :frog: Movement of frogs in Crane Prairie Reservoir, USA
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week31.png)
 
 ***
 
