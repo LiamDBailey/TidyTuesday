@@ -409,7 +409,7 @@ combo_wpts <- ggplot() +
                 label.colour = NA,
                 fill = NA, hjust = 1, colour = "white", family = "Quicksand",
                 fontface = "bold") +
-  geom_richtext(aes(x = 0.955, y = 0.47, label = "Frogs from in NE Reservoir<br>moved more than<br>200m!"), size = 2,
+  geom_richtext(aes(x = 0.955, y = 0.47, label = "Frogs from NE Reservoir<br>moved more than<br>200m!"), size = 2,
                 label.colour = NA,
                 fill = NA, hjust = 1, colour = "white", family = "Quicksand") +
   #Add TITLE/SUB/CAPTION
