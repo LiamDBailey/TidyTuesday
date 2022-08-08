@@ -1,0 +1,441 @@
+---
+title: "Week31_2022"
+format: html
+editor: visual
+params:
+  scale: 0.0005
+  start_alpha: 0.35
+  angle_grp: 12
+  luminance: 60
+  chroma: 100
+---
+
+```{r}
+
+frog_data <- tidytuesdayR::tt_load(2022, week = 31)
+frog_data <- frog_data$frogs
+
+```
+
+## Load required packages
+
+```{r, message=FALSE}
+
+library(ggplot2) #For plotting
+library(dplyr) #For data wrangling
+library(showtext) #For custom fonts
+library(colorspace) #To make HCL palettes
+library(here) #For easier relative paths
+library(geodata) #To d/l elev data
+library(osmdata) #To d/l waterbody shapefiles
+library(sf) #To work with spatial objects
+library(stars) #For raster (elevation) data
+library(fuzzyjoin) #More complex joins
+library(ggsn) #Add scalebar to map
+library(ggtext) #Better text in ggplot2
+library(purrr) #For loops
+
+#Load custom fonts
+showtext::showtext_auto()
+sysfonts::font_add_google(name = "Quicksand", family = "Quicksand")
+sysfonts::font_add_google(name = "Yeseva One", family = "Yeseva_One")
+
+```
+
+## Data wrangling
+
+Convert to sf object
+
+```{r}
+frog_data_sf <- frog_data %>% 
+  mutate(SurveyDate = lubridate::mdy(SurveyDate), #Make date object
+         Frequency = as.character(Frequency), #Frequency is discrete categories
+         #Fix order of levels in HabType
+         HabType = factor(HabType, levels = c("Reservoir", "River", "Pond"))) %>% 
+  arrange(Frequency, SurveyDate) %>% 
+  #UTM Zone 10N
+  sf::st_as_sf(coords = c("UTME_83", "UTMN_83"), crs = 32610) %>% 
+  #Convert to WGS84 for easier use
+  sf::st_transform(crs = 4326)
+```
+
+## Load elevation map
+
+Create bbox for cropping
+
+```{r}
+## Create bbox as sf object and bbox object
+
+#Used for OSM and cropping raster
+bbox <- st_bbox(c(xmin = -121.94, xmax = -121.74, ymin = 43.735, ymax = 43.825), crs = st_crs(4326))
+
+#Use for scale bar
+bbox_sf <- st_sf(geom = st_sfc(st_point(c(bbox$xmin, bbox$ymin)),
+                               st_point(c(bbox$xmin, bbox$ymax)),
+                               st_point(c(bbox$xmax, bbox$ymax)),
+                               st_point(c(bbox$xmax, bbox$ymin)),
+                               st_point(c(bbox$xmin, bbox$ymin))), crs = 4326)
+```
+
+```{r}
+#Load elevation data 
+#Use SRTM with resolution of 3 arc seconds.
+elev_data <- geodata::elevation_3s(lon = -121.80, lat = 43.78, path = here::here("./R/2022/data"))
+
+#Convert terra object to stars (I know how to work with this better)
+elev_stars    <- stars::st_as_stars(elev_data) %>% 
+  #Crop raster
+  st_crop(bbox)
+
+#Convert to data frame which cna be used to add contours
+elev_contours <- as.data.frame(elev_stars, xy = TRUE)
+```
+
+## Load waterbodies
+
+```{r}
+## Load waterbodies from OpenStreetMaps that are within the bbox
+water <- opq(bbox = bbox, timeout = 120) %>% 
+  add_osm_feature(key = 'natural', value = 'water') %>% 
+  osmdata_sf()
+```
+
+Define colour-palettes for map
+
+```{r}
+elev_palette1 <- c(colorspace::darken("#96c66a", amount = 0.15),
+                   colorspace::darken("#c9e69c", amount = 0.05), "#fefed0")
+lake_colour   <- colorspace::lighten("#08306b", amount = 0.15)
+```
+
+```{r}
+#Determine centre of reservoir where we can add the name
+reservoir_centroid <- water$osm_polygons %>% 
+  filter(name == "Crane Prairie Reservoir") %>% 
+  sf::st_centroid()
+
+map_wpts <- ggplot() +
+  #Add the elevation data
+  geom_stars(data = elev_stars) +
+  #Add the reservoir polygon
+  geom_sf(data = water$osm_polygons, fill = lake_colour, colour = "grey10") + 
+  #Add name of Reservoir in centre
+  geom_sf_text(data = reservoir_centroid, label = "Crane Prairie\nReservoir",
+               angle = 40, colour = "white", family = "Quicksand") +
+  #Add elevation contours
+  geom_contour(data = elev_contours,
+               aes(x = x, y = y, z = srtm_12_04.tif),
+               colour = "black", alpha = 0.25, breaks = seq(1300, 1700, by = 100)) +
+  #Add all sightings of frogs
+  geom_sf(data = frog_data_sf, size = 0.75, alpha = 0.5, aes(colour = HabType)) +
+  #Add scale bar
+  ggsn::scalebar(data = bbox_sf, dist = 2,
+                 transform = TRUE, dist_unit = "km",
+                 anchor = c(x = -121.745,
+                            y = 43.74),
+                 height = 0.02, st.dist = 0.025, st.size = 4,
+                 st.bottom = FALSE) +
+  #Use the defined palette for elevation
+  scale_fill_gradientn(colours = elev_palette1) +
+  #Use a qualitative HCL palette from colorspace
+  colorspace::scale_colour_discrete_qualitative(palette = "Dark 2",
+                                                l1 = params$luminance, c1 = params$chroma) +
+  #Crop the map to within our bbox
+  coord_sf(expand = 0, crs = "EPSG:4326",
+           #Add limits to cut of empty data at edges
+           ylim = c(bbox$ymin, bbox$ymax),
+           xlim = c(bbox$xmin, bbox$xmax), clip = "off") +
+  #Theme
+  theme_void() +
+  theme(legend.position = "none")
+
+#This is used later to build the final plot
+map_wpts_grob <- ggplot2::ggplotGrob(map_wpts)
+
+map_wpts
+```
+
+## Determine distance from start point for each individual
+
+```{r}
+#Extract the first record of each individaul (i.e. where they were caught and tagged)
+frog_data_sf_firstpt <- frog_data_sf %>% 
+  arrange(Frequency, SurveyDate) %>% 
+  group_by(Frequency) %>% 
+  slice(1)
+
+#Separate out all points after the first
+frog_data_sf_otherpt <- frog_data_sf %>% 
+  arrange(Frequency, SurveyDate) %>% 
+  group_by(Frequency) %>% 
+  slice(-1)
+
+#Loop through each individual (frequency) and determine distance and angle (bearing) from each point to the first point
+dist_values <- purrr::map_df(.x = as.character(unique(frog_data_sf$Frequency)),
+                             .f = ~{
+                               first <- frog_data_sf_firstpt %>% 
+                                 filter(as.character(Frequency) == ..1)
+                               
+                               other <- frog_data_sf_otherpt %>% 
+                                 filter(as.character(Frequency) == ..1)
+                               
+                               dist <- sf::st_distance(x = first, y = other)
+                               
+                               angle <- purrr::map_dbl(.x = 1:nrow(other),
+                                                       .f = ~{
+                                                         
+                                                         #Determine the bearing.
+                                                         #Returns in radians then need to convert to degrees.
+                                                         lwgeom::st_geod_azimuth(bind_rows(first, other[..1, ])) * 180/pi
+                                                       })
+                               
+                               other %>% 
+                                 mutate(distance = as.numeric(dist),
+                                        angle_deg = angle)
+                             })
+```
+
+To make a clearer plot, group data into bins for angles. By default we are using bins of 12 degrees.
+
+```{r}
+#Create data frame of all possible angle groups.
+grouped_data <- expand.grid(start_angle = seq(0, 360, by = params$angle_grp),
+                            HabType = c("Pond", "Reservoir", "River"),
+                            Frequency = as.character(unique(dist_values$Frequency))) %>%
+  group_by(HabType) %>% 
+  mutate(end_angle = lead(start_angle)) %>% 
+  filter(!is.na(end_angle)) %>% 
+  ungroup() %>% 
+  rowwise() %>% 
+  mutate(mean_angle = mean(c(start_angle, end_angle)))
+```
+
+Filter out unwanted cols
+
+```{r}
+clean_data <- dist_values %>% 
+  sf::st_drop_geometry() %>% 
+  dplyr::select(Frequency, Site:SurveyDate, distance, angle_deg) %>% 
+  #Convert angles so it runs from 0 (N) to 359
+  mutate(angle_deg_360 = ifelse(angle_deg < 0, abs(angle_deg) + 180, angle_deg)) %>% 
+  #Remove cases where angle or distance are NA
+  filter(!is.na(angle_deg_360) & !is.na(distance))
+
+#Join into grouped data 
+plot_data_raw <- grouped_data %>% 
+  fuzzy_join(y = clean_data,
+             by = list(x = c("start_angle", "end_angle", "HabType", "Frequency"),
+                       y = c("angle_deg_360", "angle_deg_360", "HabType", "Frequency")),
+             match_fun = c(`<=`, `>`, `==`, `==`),
+             mode = "left") %>% 
+  group_by(HabType.x, mean_angle) 
+
+```
+
+Group all individuals together in each habitat type at each angle and determine the average (mean) distance moved.
+
+```{r}
+plot_data <- plot_data_raw %>% 
+  group_by(HabType.x, mean_angle) %>% 
+  summarise(distance = mean(distance, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  #NAs become 0s
+  mutate(distance = tidyr::replace_na(distance, 0)) %>% 
+  rename(HabType = HabType.x) %>% 
+  #Make sure that HabType has same order as before (Reservoir first because it moved furthest)
+  #Then river and pond.
+  mutate(HabType = forcats::fct_reorder(HabType, .x = distance, .fun = max, .desc = TRUE))
+
+```
+
+Create radar plot of distance moved
+
+```{r}
+radar_distance <- ggplot() +
+  #Add point at the centre
+  geom_point(aes(x = 0, y = 0), size = 1) +
+  #Add lines to show distances (every 100m)
+  geom_segment(aes(y = seq(100, 500, by = 100),
+                   yend = seq(100, 500, by = 100),
+                   x = seq(4, 7, length.out = 5),
+                   xend = seq(340, 350, length.out = 5)),
+               lty = 3, size = 0.3, colour = "white") +
+  #Add example line where we describe how to interpret bearings
+  geom_segment(aes(y = 600, yend = 600, x = 120, xend = 160),
+               size = 0.4, colour = "white") +
+  #Create an area plot from binned data
+  geom_area(data = plot_data,
+            aes(x = mean_angle, y = distance, fill = HabType, group = HabType),
+            colour = "white", alpha = 0.85, size = 0.1) +
+  #Add arrow pointing North
+  geom_segment(aes(x = 0, xend = 0, y = 0, yend = 600), size = 0.2, arrow = arrow(length = unit(1, units = "mm")), colour = "white") +
+  #Add text for distance measures
+  geom_text(aes(x = 0, y = seq(100, 500, by = 100),
+                label = paste0(seq(100, 500, by = 100), "m")), size = 2,
+            colour = "white") +
+  #Add text for N arrow.
+  geom_text(aes(x = 0, y = 640, label = "N"), colour = "white") +
+  #Area fill uses the same palette as points in the map
+  scale_fill_discrete_qualitative(palette = "Dark 2",
+                                  l1 = params$luminance, c1 = params$chroma) +
+  coord_polar(clip = "off") +
+  theme_void() +
+  theme(legend.position = "none")
+
+radar_grob <- ggplot2::ggplotGrob(radar_distance)
+
+radar_distance
+```
+
+## Create an alpha gradient
+
+Create an explicit mathematical relationship between x (0 - 1) and alpha (0-1)
+
+```{r}
+#How fine is the raster scale
+scale <- params$scale
+
+#At what value of x do we start adjusting alpha?
+start_alpha <- params$start_alpha
+
+alpha_x_relationship <- tibble(x = seq(0, 1, scale)) %>% 
+  mutate(x_mod = case_when(x > (1 - start_alpha) ~ 1,
+                               TRUE ~ x/(1 - start_alpha))) %>% 
+  #We tried many different relationships b/w X and alpha.
+  mutate(alpha_log = case_when(x_mod == 0 ~ log(1e-4),
+                               TRUE ~ log(x_mod)),
+         alpha_lin = x_mod,
+         alpha_exp = exp(x_mod),
+         alpha_sqrt = sqrt(x_mod),
+         alpha_nthrt = x_mod^1.25,
+         alpha_squared = x_mod^2,
+         alpha_cubed = x_mod^3,
+         alpha_10th = x_mod^10) %>% 
+  mutate(across(starts_with("alpha"), .fns = ~(.-min(.))/max(.-min(.)))) %>% 
+  mutate(across(starts_with("alpha"), .fns = ~rev(.), .names = "{.col}_rev"))
+```
+
+Plot these relationships to understand better
+
+```{r}
+ggplot(data = alpha_x_relationship %>% 
+         tidyr::pivot_longer(cols = starts_with("alpha"))) +
+  geom_line(aes(x = x, y = value)) +
+  facet_wrap(facets = ~name)
+```
+
+## Build final plot
+
+Create data to make rectangle with alpha gradient
+
+```{r}
+elev_alpha <- expand.grid(x = seq(0, 1, scale),
+                          y = seq(0, 1, scale)) %>%
+  left_join(alpha_x_relationship, by = "x")
+```
+
+```{r}
+#Specify the palette that relates to HabType
+radar_palette <- colorspace::qualitative_hcl(3, palette = "Dark 2",
+                                             l = params$luminance, c = params$chroma)
+
+combo_wpts <- ggplot() +
+  #Add our map to the right
+  annotation_custom(grob = map_wpts_grob, xmin = 0, xmax = 1) +
+  #Add alpha gradient rectangle on top (obscures left side of map)
+  geom_raster(data = elev_alpha, aes(x = x, y = y, alpha = alpha_squared_rev),
+              fill = "grey5") +
+  #Add radar plot on left where rectangle is black
+  annotation_custom(grob = radar_grob, xmin = -0.025, xmax = 0.375, ymin = 0, ymax = 0.8) +
+  # Add lines to describe different parts of the plot
+  #RESERVOIR on radar graph
+  geom_segment(aes(x = 0.07, xend = 0.07, y = 0.08, yend = 0.375),
+               size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.065, y = 0.08, label = "RESERVOIR"),
+                colour = radar_palette[1], #Use same palette
+                angle = 90, size = 3, family = "Quicksand",
+                label.colour = NA, fill = NA, hjust = 0) +
+  #RIVER on radar graph
+  geom_segment(aes(x = 0.155, xend = 0.155, y = 0.06, yend = 0.355),
+               size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.15, y = 0.06, label = "RIVER"),
+                colour = radar_palette[2], #Use same palette
+                angle = 90, size = 3, family = "Quicksand",
+                label.colour = NA, fill = NA, hjust = 0) +
+  #POND on radar graph
+  geom_segment(aes(x = 0.18, xend = 0.18, y = 0.09, yend = 0.395),
+               size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.175, y = 0.09, label = "POND"),
+                colour = radar_palette[3], #Use same palette
+                angle = 90, size = 3, family = "Quicksand",
+                label.colour = NA, fill = NA, hjust = 0) +
+  #Add lines and text to describe radar plot angle
+  geom_segment(aes(x = 0.23, xend = 0.23,
+                   y = 0.075, yend = 0.165),
+               size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.23, y = 0.1,
+                    label = "The angle on the plot<br>shows the bearing of<br>the frog movement"),
+                colour = "white", family = "Quicksand",
+                size = 2,
+                label.colour = NA, fill = NA, hjust = 0) +
+  #Add line and text to describe distance measurements on radar plot
+  geom_segment(aes(x = 0.255, xend = 0.255,
+                   y = 0.57, yend = 0.635),
+               size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.255, y = 0.6175,
+                    label = "Average<br>distance of travel"),
+                colour = "white", family = "Quicksand",
+                size = 2,
+                label.colour = NA, fill = NA, hjust = 0) +
+  #Add line and text to describe individuals in SE pond
+  geom_segment(aes(x = 0.75, xend = 0.9,
+                   y = 0.335, yend = 0.335), size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.905, y = 0.347, label = "SE POND"), size = 3.5,
+                label.colour = NA,
+                fill = NA, hjust = 1, colour = "white", family = "Quicksand",
+                fontface = "bold") +
+  geom_richtext(aes(x = 0.905, y = 0.305, label = "Individuals in SE Pond<br>never moved more<br>than 55m"), size = 2,
+                label.colour = NA,
+                fill = NA, hjust = 1, colour = "white", family = "Quicksand") +
+  #Add rectangle, line and text to describe individuals in NE reservoir
+  geom_rect(aes(xmin = 0.83, xmax = 0.865,
+                ymin = 0.82, ymax = 0.86),
+            size = 0.25, colour = "white", fill = NA) +
+  geom_segment(aes(x = 0.8475, xend = 0.8475, y = 0.82, yend = 0.5),
+               size = 0.25, colour = "white") +
+  geom_segment(aes(x = 0.8475, xend = 0.95, y = 0.5, yend = 0.5),
+               size = 0.25, colour = "white") +
+  geom_richtext(aes(x = 0.955, y = 0.512, label = "NE RESERVOIR"), size = 3.5,
+                label.colour = NA,
+                fill = NA, hjust = 1, colour = "white", family = "Quicksand",
+                fontface = "bold") +
+  geom_richtext(aes(x = 0.955, y = 0.47, label = "Frogs from in NE Reservoir<br>moved more than<br>200m!"), size = 2,
+                label.colour = NA,
+                fill = NA, hjust = 1, colour = "white", family = "Quicksand") +
+  #Add TITLE/SUB/CAPTION
+  geom_richtext(aes(x = 0.02, y = 0.94, label = "Movement of the Oregon Spotted Frog"), label.colour = NA, fill = NA,
+                colour = "white", size = 9, hjust = 0, family = "Yeseva_One") +
+  geom_richtext(aes(x = 0.023, y = 0.84, label = paste0("Frogs in Crane Prairie <span style ='color:", radar_palette[1], "; font-family: Yeseva_One;'>Reservoir </span>moved 5-10x further<br>than frogs in <span style ='color:", radar_palette[2], "; font-family: Yeseva_One;'>rivers</span> or <span style ='color:", radar_palette[3], "; font-family: Yeseva_One;'>ponds</span>. These frogs may be moving to avoid<br>fish predators (e.g. trout) that are more abundant in the reservoir.<br>See Pearl et al. (2022) to learn more.")),
+                colour = "white", size = 4, hjust = 0, family = "Quicksand",
+                label.colour = NA, fill = NA) +
+  geom_richtext(aes(x = 0.023, y = 0.71, label = "Average distance<br>moved"),
+                colour = "white", size = 4, hjust = 0, family = "Yeseva_One",
+                label.colour = NA, fill = NA) +
+  geom_text(aes(x = 0.75, y = 0.035, label = "Plot: @ldbailey255 | Data : USGS.gov"),
+            colour = "grey5", size = 2.5, hjust = 0, family = "Cutive_Mono") +
+  ## Specify range of alpha values for our rectangle. Never reaches 1 (i.e. never full black)
+  scale_alpha_continuous(range = c(0, 0.95)) +
+  ##Coord and theme
+  #xlim and ylim are a bit cropped to prevent any white space at sides
+  coord_cartesian(expand = FALSE, xlim = c(0.01, 0.98), ylim = c(0.01, 0.99)) +
+  theme_void() +
+  theme(legend.position = "none",
+        plot.margin = margin())
+
+#The smooth black - transparent gradient background renders much better in pdf than
+#png, jpg, or tiff. Return .pdf and can then export this as png using software like PS.
+ggsave(plot = combo_wpts, here::here("./plots/2022/Week31.pdf"), width = 9.7, height = 6)
+
+combo_wpts
+```
+
