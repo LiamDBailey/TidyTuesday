@@ -1,0 +1,252 @@
+---
+title: "Week32_2022"
+format: html
+editor: visual
+---
+
+```{r}
+
+ferris_data <- tidytuesdayR::tt_load(2022, week = 32)
+ferris_data <- ferris_data$wheels
+
+```
+
+# Load packages
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(skimr)
+library(lubridate)
+library(ggstream)
+library(ggtext)
+library(ggsvg)
+library(countrycode)
+library(showtext)
+
+showtext::showtext_auto()
+sysfonts::font_add_google(name = "Quicksand", family = "Quicksand")
+sysfonts::font_add_google(name = "Alfa Slab One", family = "Alfa_Slab_One")
+```
+
+#Explore data
+
+We want to look at price of ferris wheels and their size. How do we measure size? Let's see which column (e.g. height, capacity etc) has the fewest NAs.
+
+Height has the fewest missing data, but all of them are pretty complete
+
+```{r}
+skim(ferris_data)
+```
+
+Number of rows of data is quite low (I assumed it would be many more across multiple countries).
+
+Construction cost also has a lot of hidden NAs ('Unknown'), which is why it has so few unique values.
+
+A full map with cost v. size will not be feasible.
+
+We could go with a couple of options:
+1) Stream graph of size/cost of wheels over time
+2) Bivariate scale map but just focussing on the countries where we have data and using metrics other than cost.
+
+Basic data wrangling
+
+```{r}
+ferris_data <- ferris_data %>% 
+  mutate(across(.cols = opened:closed, .fns = lubridate::ymd))
+```
+
+
+# Plot option 1: Stream plot
+
+Group smaller countries together.
+
+```{r}
+small_countries <- ferris_data %>% 
+  group_by(country) %>% 
+  summarise(n = n()) %>% 
+  filter(n == 1) %>% 
+  pull(country)
+
+ferris_data <- ferris_data %>% 
+  mutate(country2 = case_when(country %in% small_countries ~ "Other",
+                              TRUE ~  countrycode(sourcevar = country,
+                                                  origin = "country.name",
+                                                  destination = "iso3c",
+                                                  warn = FALSE)))
+```
+
+Seems like this could easily fail because we have a few very old ferris wheels and then many more recent ones. Maybe focus only on wheels build after 1980? Extract the earliest wheel for labelling.
+
+Plot just total number of ferris wheels per country/year (maybe easier to interpret)
+
+```{r}
+first_wheel <- ferris_data %>% 
+  filter(opened == min(opened, na.rm = TRUE))
+
+opening_data <- ferris_data %>% 
+  filter(!is.na(opened)) %>% 
+  mutate(opened = ymd(opened),
+         year = year(opened)) %>% 
+  filter(opened >= ymd("1980-01-01")) %>% 
+  group_by(country2, year) %>% 
+  summarise(total_wheels = n(), .groups = "drop")
+
+plot_data <- expand.grid(year = seq(1980, max(opening_data$year)),
+                         country2 = unique(opening_data$country2)) %>% 
+  left_join(opening_data, by = c("year", "country2")) %>% 
+  mutate(total_wheels = tidyr::replace_na(total_wheels, 0),
+         country2 = factor(country2))
+```
+
+Load flag data
+
+```{r}
+flag_svg_db <- read.csv(here::here("./R/2022/data/Country_Flags.csv")) %>% 
+  mutate(Country = countrycode(sourcevar = Country,
+                               origin = "country.name",
+                               destination = "iso3c",
+                               warn = FALSE)) %>% 
+  filter(Country %in% plot_data$country2) %>% 
+  rowwise() %>% 
+  mutate(ImageSVG = paste(readLines(ImageURL, warn = FALSE), collapse = "\n"))
+```
+
+```{r}
+stream_palette <- c("grey80", colorspace::qualitative_hcl(palette = "Dark2", n = length(levels(plot_data$country2)), l = 60))
+
+ggplot() +
+  #Add text labels and grid lines behind stream
+  geom_segment(aes(x = seq(1980, 2010, 10), xend = seq(1980, 2010, 10),
+                   y = -4.5, yend = 4.5), colour = "grey10",
+               size = 0.3, lty = 5) +
+  geom_richtext(aes(x = seq(1980, 2010, 10) - 0.5,
+                    label = seq(1980, 2010, 10)),
+                y = -4.75,
+                angle = 90, size = 2.5, family = "Quicksand", hjust = 0,
+                label.colour = NA, fill = NA, colour = "#1a1110") +
+  #Create stream plot
+  geom_stream(data = plot_data,
+              aes(x = year, y = total_wheels, group = country2, fill = country2),
+              n_grid = 5000, bw = 0.65, extra_span = 0.2,
+              # true_range = "none",
+              colour = "#1a1110", size = 0.15) +
+  #Add titles in stream where possible
+  geom_richtext(aes(x = c(2012, 2004, 1999, 1999.5),
+                    y = c(0.7, 1.25, 1.125, 0.625),
+                    label = c("OTHER", "CHINA", "FRANCE", "UK")),
+                size = 1.5, colour = "#1a1110",
+                hjust = 0,
+                label.colour = NA, fill = NA) +
+  #Add lines with descriptive info
+  ## Australia 2008 (building Southern Star)
+  geom_segment(aes(x = 2008, xend = 2008,
+                   y = 2.3, yend = 3.5),
+               size = 0.2, colour = "#1a1110",
+               arrow = arrow(length = unit(0.075, "cm"), ends = "first")) +
+  geom_segment(aes(x = 2008, xend = 2002,
+                   y = 3.5, yend = 3.5),
+               size = 0.2, colour = "#1a1110") +
+  geom_richtext(aes(x = 2002.75, y = 3.65, label = "AUSTRALIA"),
+                size = 2.5, colour = "#1a1110",
+                hjust = 0,
+                label.colour = NA, fill = NA, fontface = "bold") +
+  geom_point_svg(aes(x = 2002.45, y = 3.68), size = 3.65,
+                 svg = filter(flag_svg_db, Country == "AUS")$ImageSVG) +
+  geom_richtext(aes(x = 2001.75, y = 3.06,
+                    label = "Opening of the (failed)<br>'Southern Star' in<br>Melbourne (2008)"),
+                size = 1.75, colour = "#1a1110",
+                hjust = 0,
+                label.colour = NA, fill = NA, lineheight = 1.25) +
+  ## USA 2013
+  geom_segment(aes(x = 2013, xend = 2013,
+                   y = 0, yend = -3),
+               size = 0.2, colour = "#1a1110",
+               arrow = arrow(length = unit(0.075, "cm"), ends = "both")) +
+  geom_segment(aes(x = 2013, xend = 2018.3,
+                   y = -2.45, yend = -2.45),
+               size = 0.2, colour = "#1a1110") +
+  geom_richtext(aes(x = 2018.5, y = -2.3, label = "USA"),
+                size = 2.5, colour = "#1a1110",
+                hjust = 1,
+                label.colour = NA, fill = NA, fontface = "bold") +
+  geom_point_svg(aes(x = 2016.35, y = -2.275), size = 3.65,
+                 svg = filter(flag_svg_db, Country == "USA")$ImageSVG) +
+  geom_richtext(aes(x = 2018.5, y = -2.9,
+                    label = "4 ferris wheels opened<br>in the US in 2013,<br>50% of all constructions"),
+                size = 1.75, colour = "#1a1110",
+                hjust = 1,
+                label.colour = NA, fill = NA, lineheight = 1.25) +
+  ## JAPAN 2000s
+  geom_segment(aes(x = 1996.25, xend = 2001.75,
+                   y = 0.15, yend = 0.15),
+               size = 0.2, colour = "#1a1110",
+               arrow = arrow(length = unit(0.075, "cm"), ends = "both")) +
+  geom_segment(aes(x = 1998.5, xend = 1998.5,
+                   y = 0.15, yend = 2.5),
+               size = 0.2, colour = "#1a1110") +
+  geom_segment(aes(x = 1998.5, xend = 1994,
+                   y = 2.5, yend = 2.5),
+               size = 0.2, colour = "#1a1110") +
+  geom_richtext(aes(x = 1994.75, y = 2.65, label = "JAPAN"),
+                size = 2.5, colour = "#1a1110",
+                hjust = 0,
+                label.colour = NA, fill = NA, fontface = "bold") +
+  geom_point_svg(aes(x = 1994.45, y = 2.68), size = 3.65,
+                 svg = filter(flag_svg_db, Country == "JPN")$ImageSVG) +
+  geom_richtext(aes(x = 1993.75, y = 2.06,
+                    label = "Japan built 6 ferris<br>wheels from<br>1996-2001"),
+                size = 1.75, colour = "#1a1110",
+                hjust = 0,
+                label.colour = NA, fill = NA, lineheight = 1.25) +
+  ## Taiwan (no text just label)
+  geom_segment(aes(x = 2004, xend = 2004,
+                   y = -1.5, yend = -3.5),
+               size = 0.2, colour = "#1a1110",
+               arrow = arrow(length = unit(0.075, "cm"), ends = "first")) +
+  geom_segment(aes(x = 2004, xend = 2008.05,
+                   y = -3.5, yend = -3.5),
+               size = 0.2, colour = "#1a1110") +
+  geom_richtext(aes(x = 2008.3, y = -3.35, label = "TAIWAN"),
+                size = 2.5, colour = "#1a1110",
+                hjust = 1,
+                label.colour = NA, fill = NA, fontface = "bold") +
+  geom_point_svg(aes(x = 2005.05, y = -3.305), size = 3.65,
+                 svg = filter(flag_svg_db, Country == "TWN")$ImageSVG) +
+  geom_richtext(aes(x = 2008.3, y = -3.95,
+                    label = "Mirimar Ferris Wheel<br>(2004) is one of three<br>wheels in Taiwan"),
+                size = 1.75, colour = "#1a1110",
+                hjust = 1,
+                label.colour = NA, fill = NA, lineheight = 1.25) +
+  #Title/subs/caption
+  labs(title = "2013 WAS PEAK FERRIS WHEEL",
+       subtitle = "8 ferris wheels were opened in 2013 across 5 countries.<br>The US opened 16 ferris wheels between 1980 and 2017.<br>Japan has opened the second most (11), but only 1 in the last decade.",
+       caption = "Plot: @ldbailey255 | Data: @Emil_Hvitfeldt",
+       y = "<- Number of ferris wheels opened ->") +
+  #Scales and coords
+  scale_x_continuous(breaks = seq(1980, 2010, 10)) +
+  scale_fill_manual(values = stream_palette,
+                    breaks = c("Other",
+                               levels(forcats::fct_drop(plot_data$country2,
+                                                        only = "Other")))) +
+  coord_cartesian(xlim = c(1979, 2018),
+                  ylim = c(-5, 5), clip = "off") +
+  #Theme
+  theme_void() +
+  theme(legend.position = "none",
+        axis.title.y = element_text(family = "Quicksand", size = 8,
+                                    colour = "#1a1110", angle = 90,
+                                    margin = margin(l = 10)),
+        panel.background = element_rect(fill = "#ecf3f3", colour = NA),
+        plot.background = element_rect(fill = "#ecf3f3", colour = NA),
+        plot.title = element_markdown(family = "Alfa_Slab_One", size = 18,
+                                      colour = "#1a1110"),
+        plot.subtitle = element_markdown(family = "Quicksand", size = 9,
+                                         colour = "#1a1110", lineheight = 1.5),
+        plot.caption = element_markdown(family = "Quicksand", size = 6,
+                                        colour = "#1a1110", margin = margin(r = 5, b = 5)))
+
+#Save as pdf to get nice rendering of flag svg
+#Can export to png from e.g. Photoshop
+ggsave(here::here("./plots/2022/Week32.pdf"))
+```
