@@ -21,6 +21,7 @@ Quick Link
 
 <!-- toc -->
 * **2022**
+  - 2022/Week 33 [:tv: Average 'kindness' metric of different movie/TV universes](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week33.png)
   - 2022/Week 32 [:ferris_wheel: Number of ferris wheels built over time](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week32.png)
   - 2022/Week 31 [:frog: Movement of frogs in Crane Prairie Reservoir, USA](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week31.png)
   - 2022/Week 25 [:us: History of US slavery historic census data](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week25.png)
@@ -49,6 +50,12 @@ Quick Link
 <!-- tocstop -->
 
 </details>
+
+***
+
+### [2022/Week 33](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week33.png) :tv: Average 'kindness' metric of different movie/TV universes
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week33.png)
 
 ***
 
