@@ -1,0 +1,233 @@
+---
+title: "Week33_2022"
+format: html
+editor: visual
+---
+
+```{r}
+
+psych_data  <- tidytuesdayR::tt_load(2022, week = 33)
+characters  <- psych_data$characters
+psych_stats <- psych_data$psych_stats
+myersbriggs <- psych_data$myers_briggs
+
+```
+
+# Load packages
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(skimr)
+library(ggsvg)
+library(ggdist)
+library(ggtext)
+library(scales)
+
+showtext::showtext_auto()
+# #FONTS FROM ADOBE FONTS
+sysfonts::font_add(family = "DollyPro", regular = "DollyPro1.otf",
+                   bold = "DollyPro2.otf")
+sysfonts::font_add(family = "AltGothic", regular = "AltGothic7.otf",
+                   bold = "AltGothic4.otf")
+sysfonts::font_add(family = "FormaDJR", regular = "FormaDJR-Regular.otf",
+                   bold = "FormaDJR-Bold.otf")
+
+```
+
+## Explore data
+
+### Character
+
+```{r}
+head(characters)
+```
+
+
+```{r}
+skim(characters)
+```
+
+- We have 889 unique individuals. Although some have duplicate names...these are the same characters in different versions of the Batman universe.
+
+```{r}
+characters %>% 
+  group_by(name) %>% 
+  filter(n() > 1)
+```
+
+### Pysch stats
+
+```{r}
+head(psych_stats)
+```
+
+
+```{r}
+skim(psych_stats)
+```
+
+- We have 400 different questions across our characters and a rank/rating.
+- Does every character have the same number of questions asked about them? Yes
+
+```{r}
+psych_stats %>% 
+  group_by(char_id) %>% 
+  summarise(nQs = length(unique(question))) %>% 
+  pull(nQs) %>% 
+  unique()
+```
+
+###  Myers-Briggs data
+
+```{r}
+head(myersbriggs)
+```
+
+```{r}
+skim(myersbriggs)
+```
+
+- Have 16 unique Meyer-Briggs categories.
+- Again, check if they are consistently asked for all characters.
+
+```{r}
+myersbriggs %>% 
+  group_by(char_id) %>% 
+  summarise(nQs = length(unique(myers_briggs))) %>% 
+  pull(nQs) %>% 
+  unique()
+```
+
+## Data wrangling
+
+We will look at average 'kindness' of different universes
+
+```{r}
+kind_data <- psych_stats %>% 
+  filter(question == "cruel/kind") %>% 
+  #Convert to a single metric where avg rating 100 cruel = 0
+  mutate(cruel_kind_continuum = case_when(personality == "cruel" ~ abs(avg_rating - 100),
+                                          TRUE ~ avg_rating))
+```
+
+To check the data, who are the cruelest (and kindest) characters? Seems about right!
+
+```{r}
+filter(kind_data, cruel_kind_continuum %in% c(max(cruel_kind_continuum),
+                                              min(cruel_kind_continuum)))
+```
+
+Get an average rating for every universe.
+
+```{r}
+kind_uni <- kind_data %>% 
+  group_by(uni_id) %>% 
+  summarise(uni_name = first(uni_name),
+            mean_kind = mean(cruel_kind_continuum),
+            N = n(),
+            se = sd(cruel_kind_continuum)/sqrt(n()),
+            min_kind = min(cruel_kind_continuum),
+            max_kind = max(cruel_kind_continuum)) %>% 
+  mutate(across(uni_id:uni_name, .fns = ~forcats::fct_reorder(., .x = mean_kind, .fun = first))) %>% 
+  arrange(desc(mean_kind)) %>% 
+  mutate(rank_number = 1:n())
+
+kind_uni
+```
+
+Arrange factors in both dataset to be arranged by mean kindness
+
+```{r}
+plot_data <- kind_data %>% 
+  left_join(kind_uni) %>% 
+  mutate(across(uni_id:uni_name,
+                .fns = ~forcats::fct_reorder(., .x = mean_kind, .fun = first)))
+```
+
+## Plot
+
+Plot bars for each character plus the avg/SE.
+
+```{r}
+#Use hex from RdYlGn palette in Colour Brewer
+green_red_palette <- scales:::brewer_pal(type = "div", palette = "RdYlGn")(11)
+green_red_palette_dark <- colorspace::darken(green_red_palette, amount = 0.2)
+
+```
+
+```{r}
+ggplot() +
+  geom_vline(xintercept = 50, lty = 2, size = 0.25) +
+  stat_gradientinterval(data = plot_data,
+                        aes(y = uni_name,
+                            x = cruel_kind_continuum,
+                            fill = mean_kind),
+                        scale = 1,
+                        slab_alpha = 0.6,
+                        fill_type = "gradient",
+                        geom = "slab",
+                        slab_type = "pdf", colour = NA,
+                        point_interval = "mean_qi") +
+  geom_segment(data = kind_uni,
+               aes(x = mean_kind - se,
+                   xend = mean_kind + se,
+                   y = uni_name,
+                   yend = uni_name),
+               size = 0.2) +
+  geom_point(data = kind_uni,
+             aes(y = uni_name, x = mean_kind, fill = mean_kind),
+             shape = 21, size = 1.25, stroke = 0.25) +
+  geom_text(data = kind_uni,
+            aes(y = uni_name, x = 115, label = paste(rank_number, uni_name, sep = ". ")),
+            size = 7, hjust = 0, colour = "black",
+            family = "AltGothic") +
+  #ADD MANUAL AXIS LINE SO WE CAN LIMIT THE EXTENT
+  geom_segment(aes(x = 100, xend = 0, y = 101, yend = 101),
+               size = 0.25) +
+  #ADD MANUAL TITLE ABOVE AXIS
+  geom_richtext(aes(x = c(75, 25),
+                    y = 100,
+                    label = c(paste0("<span style='color:",
+                                   green_red_palette[11],
+                                   ";'>Kind</span>"),
+                              paste0("<span style='color:",
+                                   green_red_palette[1],
+                                   ";'>Cruel</span>"))),
+                label.colour = NA, fontface = "bold", size = 20,
+                fill = NA, hjust = 0.5, vjust = -0.6,
+                family = "DollyPro") +
+  #Titles and labels
+  labs(title = "WHO HAS THE KINDEST CHARACTERS?",
+       subtitle = paste0("Police dramas, like Criminal Minds and NCIS, have the KINDEST characters on average<br>In comparison, comedy TV shows have some of the  CRUELEST characters,<br> like Always Sunny, Veep, and Archer."),
+       caption = "Plot: @ldbailey255 | Data: openpsychometrics.org") +
+  scale_fill_gradientn(colours = green_red_palette_dark) +
+  scale_x_continuous(position = "top",
+                     breaks = seq(100, 0, -25),
+                     minor_breaks = seq(100, 0, -12.25),
+                     labels = c(100, 50, 0, 50, 100)) +
+  coord_fixed(clip = "off", ratio = 1.8,
+              xlim = c(120, -20),
+              expand = FALSE) +
+  theme_classic() +
+  theme(axis.ticks.y = element_blank(),
+        axis.ticks.x = element_line(size = 0.25, lineend = "round"),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.text.x = element_markdown(colour = "black", size = 35,
+                                    family = "AltGothic"),
+        legend.position = "none",
+        plot.margin = margin(r = 10, l = 20, t = 5, b = 5),
+        plot.title = element_markdown(size = 80,
+                                      margin = margin(l = 10, b = 7, t = 10),
+                                      family = "DollyPro"),
+        plot.subtitle = element_markdown(margin = margin(l = 10, b = 20),
+                                         size = 40, lineheight = 0.2,
+                                         family = "FormaDJR"),
+        plot.caption = element_markdown(size = 30, family = "AltGothic"),
+        plot.background = element_rect(fill = "#fafafa", colour = NA),
+        panel.background = element_rect(fill = "#fafafa", colour = NA))
+
+ggsave(here::here("./plots/2022/Week33.png"), height = 6, width = 4, dpi = 600)
+```
