@@ -147,7 +147,7 @@ plot_data <- kind_data %>%
 
 ## Plot
 
-Plot bars for each character plus the avg/SE.
+Plot horizontal bars for each universe plus the avg/SE.
 
 ```{r}
 #Use hex from RdYlGn palette in Colour Brewer
@@ -184,23 +184,23 @@ ggplot() +
             family = "AltGothic") +
   #ADD MANUAL AXIS LINE SO WE CAN LIMIT THE EXTENT
   geom_segment(aes(x = 100, xend = 0, y = 101, yend = 101),
-               size = 0.25) +
+               size = 0.25, lineend = "round") +
   #ADD MANUAL TITLE ABOVE AXIS
   geom_richtext(aes(x = c(75, 25),
                     y = 100,
                     label = c(paste0("<span style='color:",
-                                   green_red_palette[11],
-                                   ";'>Kind</span>"),
+                                     green_red_palette[11],
+                                     ";'>Kind</span>"),
                               paste0("<span style='color:",
-                                   green_red_palette[1],
-                                   ";'>Cruel</span>"))),
+                                     green_red_palette[1],
+                                     ";'>Cruel</span>"))),
                 label.colour = NA, fontface = "bold", size = 20,
                 fill = NA, hjust = 0.5, vjust = -0.6,
                 family = "DollyPro") +
   #Titles and labels
-  labs(title = "WHO HAS THE KINDEST CHARACTERS?",
+  labs(title = "WHO HAS THE KINDEST* CHARACTERS?",
        subtitle = paste0("Police dramas, like Criminal Minds and NCIS, have the KINDEST characters on average<br>In comparison, comedy TV shows have some of the  CRUELEST characters,<br> like Always Sunny, Veep, and Archer."),
-       caption = "Plot: @ldbailey255 | Data: openpsychometrics.org") +
+       caption = "Plot: @ldbailey255 | Data: openpsychometrics.org<br>* A characters score is aggregated from millions of users who rate fictional characters on a continuum from cruel to kind.") +
   scale_fill_gradientn(colours = green_red_palette_dark) +
   scale_x_continuous(position = "top",
                      breaks = seq(100, 0, -25),
@@ -216,7 +216,7 @@ ggplot() +
         axis.title = element_blank(),
         axis.line = element_blank(),
         axis.text.x = element_markdown(colour = "black", size = 35,
-                                    family = "AltGothic"),
+                                       family = "AltGothic"),
         legend.position = "none",
         plot.margin = margin(r = 10, l = 20, t = 5, b = 5),
         plot.title = element_markdown(size = 80,
@@ -225,7 +225,7 @@ ggplot() +
         plot.subtitle = element_markdown(margin = margin(l = 10, b = 20),
                                          size = 40, lineheight = 0.2,
                                          family = "FormaDJR"),
-        plot.caption = element_markdown(size = 30, family = "AltGothic"),
+        plot.caption = element_markdown(size = 30, family = "AltGothic", lineheight = 0.1),
         plot.background = element_rect(fill = "#fafafa", colour = NA),
         panel.background = element_rect(fill = "#fafafa", colour = NA))
 
