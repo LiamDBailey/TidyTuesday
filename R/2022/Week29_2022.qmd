@@ -1,0 +1,329 @@
+---
+title: "Week29_2022"
+format: html
+editor: visual
+---
+
+```{r}
+
+tech_data  <- tidytuesdayR::tt_load(2022, week = 29)
+tech_data  <- tech_data$technology
+
+```
+
+# Attach packages
+
+```{r}
+library(ggplot2) #Plotting
+library(dplyr) #Data wrangling
+library(skimr) #Data exploration
+library(ggtext) #Add richtext to plots
+# library(scales)
+library(stringr) #String manipulation
+library(countrycode) #Convert ISO codes to country names
+# library(geodata)
+library(showtext) #Custom fonts
+library(cowplot) #Combine multiple ggplots
+library(wbstats) #Download world bank population stats (calculate per capita data)
+library(rnaturalearth) #Download country borders
+library(biscale) #Create bivariate scale plot
+library(colorspace) #Used to lighten/darken colours to achieve custom palette
+
+showtext::showtext_auto()
+#Use bold by default
+sysfonts::font_add(family = "Gravesend",
+                   regular = "Gravesend_Medium.otf",
+                   bold = "Gravesend_Medium.otf")
+sysfonts::font_add(family = "Quicksand",
+                   regular = "Quicksand-Regular.ttf",
+                   bold = "Quicksand-SemiBold.ttf")
+sysfonts::font_add(family = "FormaDJR",
+                   regular = "FormaDJR-Regular.otf",
+                   bold = "FormaDJR-Bold.otf")
+```
+
+# Explore data
+
+```{r}
+skim(tech_data)
+```
+
+Look at electricity categories only
+
+```{r}
+tech_data %>% 
+  filter(str_detect(variable, "^elec")) %>% 
+  group_by(variable) %>% 
+  slice(1) %>% 
+  select(variable, label)
+```
+
+# Data wrangling
+
+For each country (in most recent year) extract the TOTAL energy consumption and the PROPORTION of consumption that comes from fossil fuels.
+
+We will work with 2019 because this is when most data are available (also it's pre covid, which is helpful).
+
+```{r}
+plot_data <- tech_data %>% 
+  select(-group, -category, -label) %>% 
+  filter(str_detect(variable, "^elec")) %>%
+  tidyr::pivot_wider(names_from = variable, values_from = value) %>% 
+  group_by(iso3c) %>% 
+  filter(year == 2019) %>% 
+  mutate(total_col = elecprod,
+         #Check these are the same
+         total_calc = elec_coal + elec_gas + elec_hydro + elec_nuc + elec_oil + elec_renew_other + elec_solar + elec_wind,
+         prop_fossilfuel = (elec_coal + elec_gas + elec_oil)/total_calc,
+         prop_renewable = (elec_hydro + elec_nuc + elec_renew_other + elec_solar + elec_wind)/total_calc) %>% 
+  #Convert iso codes to country names
+  mutate(country_name = countrycode::countrycode(sourcevar = iso3c, origin = "iso3c", destination = "country.name")) %>% 
+  #Add Kosovo manually (not officially recognised in ISO codes)
+  mutate(country_name = case_when(iso3c == "XKX" ~ "Kosovo",
+                                  TRUE ~ country_name))
+```
+
+Adjust data to be per-capita (NOTE: We don't use this anymore, but keeping it here if we want to adjust plots at a later point).
+
+```{r}
+pop_data <- wb_data("SP.POP.TOTL", start_date = 2019, end_date = 2019) %>% 
+  select(iso3c, population = SP.POP.TOTL)
+
+plot_data_percapita <- plot_data %>% 
+  left_join(pop_data, by = "iso3c") %>% 
+  mutate(total_percap = total_calc/population)
+```
+
+# Plot
+
+## Download world map
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf") %>% 
+  #Add Kosovo code so we can match
+  mutate(iso_a3 = case_when(name == "Kosovo" ~ "XKX",
+                            TRUE ~ iso_a3))
+```
+
+Create circular cut-out which is centred around middle of Europe (excluding Russia).
+
+```{r}
+centre_pt <- world %>% 
+  filter(continent == "Europe" & iso_a3 != "RUS") %>% 
+  sf::st_union() %>% 
+  sf::st_make_valid() %>% 
+  sf::st_centroid() %>% 
+  #Convert to projected CRS so we get smooth buffer
+  sf::st_transform(crs = "EPSG:3035")
+
+#See what it looks like on map
+circle_d <- 2.4e6
+ggplot() +
+  geom_sf(data = world %>% sf::st_transform(crs = "EPSG:3035"),
+          fill = "dark grey",
+          colour = "white", size = 0.15) +
+  geom_sf(data = sf::st_buffer(centre_pt, circle_d))
+```
+Looks good, so crop it.
+
+```{r}
+circle_crop <- sf::st_buffer(centre_pt, circle_d)
+#Second circle to make neat 'buffer' around plot
+circle_crop2 <- sf::st_buffer(centre_pt, circle_d*1.025)
+
+world_crop <- world %>%
+  sf::st_transform(crs = "EPSG:3035") %>%
+  sf::st_make_valid() %>% 
+  sf::st_intersection(circle_crop)
+```
+
+Create bivariate scale from data
+
+```{r}
+dim <- 4
+world_wfill_crop <- world_crop %>% 
+  left_join(plot_data_percapita, by = c("iso_a3" = "iso3c"))
+
+#Split into Europe data (where we will show values) and other data which will be great
+#Remove Macedonia (we don't have the data for 2019)
+EU_biscale <- bi_class(world_wfill_crop %>% 
+                         filter((continent == "Europe" | country_name %in% c("Turkey")) & !country_name %in% c("North Macedonia", "Russia")),
+                       x = prop_fossilfuel,
+                       # y = total_percap,
+                       y = total_calc, #Because this is generation (not consumption) I used absolute val
+                       ## Consumption would also require accounting for imports, which I don't have
+                       style = "fisher", dim = dim) %>% 
+  select(formal_en, iso_a3, elec_coal:bi_class)
+
+other_sf <- world_wfill_crop %>% 
+  filter(!((continent == "Europe" | country_name %in% c("Turkey")) & !country_name %in% c("North Macedonia", "Russia")))
+```
+
+Create manual lines that can show meridians
+
+```{r}
+meridian_long <- seq(-60, 60, 15)
+
+long_lines <- lapply(X = meridian_long, FUN = \(x){sf::st_linestring(x = data.frame(V1 = x, V2 = seq(0, 90, 1)) %>% as.matrix())}) %>% 
+  sf::st_sfc() %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_sf()
+
+meridian_lat <- seq(0, 90, 15)
+
+lat_lines <- lapply(X = meridian_lat, FUN = \(x){sf::st_linestring(x = data.frame(V1 = seq(-60, 60, 1), V2 = x) %>% as.matrix())}) %>% 
+  sf::st_sfc() %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_sf()
+
+#Combine together and crop inside the same circle
+cropped_lines <- lat_lines %>% 
+  rbind(long_lines) %>% 
+  sf::st_transform("EPSG:3035") %>% 
+  sf::st_intersection(circle_crop)
+
+```
+
+Create univariate plots
+
+```{r}
+
+map1 <- ggplot() +
+  geom_sf(data = cropped_lines, size = 0.25, colour = "dark grey") +
+  geom_sf(data = other_sf,
+          fill = "grey75", size = 0.1, alpha = 0.2, colour = "grey50") +
+  geom_sf(data = EU_biscale, aes(fill = total_percap),
+          colour = "grey10", size = 0.3) +
+  geom_sf(data = circle_crop,
+          fill = NA, colour = "black") +
+  scale_fill_gradient2() +
+  theme_void() +
+  theme(legend.position = "right")
+
+map1
+
+```
+
+```{r}
+
+map2 <- ggplot() +
+  geom_sf(data = cropped_lines, size = 0.25, colour = "dark grey") +
+  geom_sf(data = other_sf,
+          fill = "grey75", size = 0.1, alpha = 0.2, colour = "grey50") +
+  geom_sf(data = EU_biscale, aes(fill = prop_fossilfuel),
+          colour = "grey10", size = 0.3) +
+  geom_sf(data = circle_crop,
+          fill = NA, colour = "black") +
+  scale_fill_gradient2() +
+  theme_void() +
+  theme(legend.position = "right")
+
+map2
+
+```
+
+## Final plot
+
+```{r}
+
+### X = PROP FOSSIL FUELS
+### Y = ENERGY PER CAPITA
+
+#Create a scale from brown to green
+green_brown_palette <- colorRampPalette(sapply(seq(10, 180, length.out = 50), FUN = \(x){rgb(red = 0, green = x, blue = 0, alpha = 1, maxColorValue = 255)}))
+
+#This palette should go from low x (low fossil fuel use) to high x (high fossil fuel user)
+alpha1_cols <- rev(green_brown_palette(dim))
+#These values should go from low y (low energy generation) to high y (high energy generation)
+#Remember, low y = MORE LIGHTENED
+lighten_vals <- rev(seq(0, 0.6, length.out = dim))
+
+#Palettes need to start with the lowest val of x and y
+#In this case, this is the lightest colour (i.e. start with highest lightening val)
+col_matrix <- sapply(lighten_vals, FUN = \(x){lighten(alpha1_cols, amount = x)})
+
+combos <- expand.grid(x = 1:dim, y = 1:dim)
+
+pal <- purrr::pmap_chr(.l = combos,
+                       .f = ~{
+                         
+                         vec <- c(col_matrix[..1, ..2])
+                         
+                         return(vec)
+                         
+                       })
+
+#For biscale to work we need to name palette as "x-y"
+names <- paste(combos$x, combos$y, sep = "-")
+names(pal) <- names
+
+map3 <- ggplot() +
+  geom_sf(data = circle_crop2,
+          fill = "white", colour = "black") +
+  geom_sf(data = circle_crop,
+          fill = "#ADD8E6", colour = "black") +
+  geom_sf(data = cropped_lines, size = 0.25, colour = "dark grey") +
+  geom_sf(data = other_sf,
+          fill = "grey95", size = 0.1, colour = "grey50") +
+  geom_sf(data = EU_biscale, aes(fill = bi_class),
+          colour = "black", size = 0.1) +
+  geom_sf(data = circle_crop,
+          fill = NA, colour = "black") +
+  bi_scale_fill(pal = pal, dim = dim) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(r = 0, l = 50)
+  )
+
+map3
+
+```
+Create legend. Do it ourself rather than using bi_legend (more control)
+
+```{r}
+(bi_legend <- ggplot() +
+   geom_tile(data = combos %>%
+               mutate(name = paste(x, y, sep = "-")),
+             aes(x = x, y = y, fill = name, colour = name)) +
+   labs(x = "\U0025 fossil fuels \U21C1",
+        y = "(TWH)\nEnergy generation \U21C0") +
+   scale_fill_manual(values = pal) +
+   scale_colour_manual(values = pal) +
+   coord_fixed(ratio = 1) +
+   theme_void() +
+   theme(legend.position = "none",
+         axis.title.x = element_text(size = 20),
+         axis.title.y = element_text(angle = 90, size = 20, lineheight = 0.25),
+         panel.background = element_blank(),
+         plot.background = element_blank()))
+```
+
+Combine together
+
+```{r}
+
+text_details <- paste0("<span style='font-family:Gravesend'>GERMANY IS EUROPE'S<br>BIGGEST GENERATOR OF FOSSIL FUEL ENERGY</span><br><br>", stringr::str_replace_all(stringr::str_wrap("Germany is Europe's largest energy generator. Almost half of this energy (47%) comes from fossil fuels. In comparison, France, Ukraine, Sweden, and Norway are in Europe's top 10 energy generators but use less than 20% fossil fuels. Energy generation in Belarus and Moldova is predominantly fossil fuel based (>90%) but absolute energy production is low.", width = 50), pattern = "\n", replacement = "<br>"))
+
+final_plot <- ggdraw() +
+  draw_plot(map3, -0.3, 0.03, 1, 1) +
+  draw_plot(bi_legend, -0.03, -0.06, 0.275, 0.275) +
+  geom_richtext(aes(x = 0.55, y = 0.67, label = text_details),
+                label.colour = NA, fill = NA, lineheight = 0.5, size = 10,
+                family = "Quicksand", hjust = 0) +
+  labs(title = "European energy generation (2019)",
+       subtitle = "",
+       caption = "*Data missing for N. Macedonia<br>Plot: @ldbailey255 | Data: CHAT database (data.nber.org)") +
+  theme(plot.title = element_markdown(hjust = 0, size = 60, margin = margin(b = 15),
+                                      family = "Gravesend", face = "bold", lineheight = 0.5),
+        plot.caption = element_markdown(hjust = 1, size = 15, lineheight = 0.5,
+                                        family = "Gravesend"),
+        plot.margin = margin(r = 40, l = 40, b = 30, t = 30),
+        plot.background = element_rect(fill = "#fdfaf6", colour = NA),
+        panel.background = element_rect(fill = "#fdfaf6", colour = NA))
+
+
+ggsave(final_plot, filename = here::here(paste0("./plots/2022/Week29_dim", dim, ".png")),
+       width = 8, height = 5)
+```
+
