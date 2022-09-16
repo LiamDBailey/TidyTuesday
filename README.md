@@ -39,7 +39,7 @@ Quick Link
   - 2019/Week 46 [:nerd_face: R packages](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/Week46_2019.png)
   - 2019/Week 45 [:bike: Cycling in the US](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/5_11_2019.png)
   - 2019/Week 43 [:clapper: Horror movies](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/22_10_19.png)
-  - 2019/Week 42 [:car: Car emissions](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/15_10_19_plots/15_10_19.png)
+  <!-- - 2019/Week 42 [:car: Car emissions](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/15_10_19_plots/15_10_19.png) --->
   - 2019/Week 41 [:weight_lifting: Powerlifting](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/08_10_19.png)
   - 2019/Week 40 [:pizza: New York pizza](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/01_10_19.png)
   - 2019/Week 38 [:tent: US National parks](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/17_09_19.png)
@@ -142,11 +142,11 @@ Quick Link
 
 ![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/22_10_19.png)
 
-***
+<!--- ***
 
 ### [2019/Week 42](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/15_10_19_plots/15_10_19.png) :car: Car emissions
 
-![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/15_10_19_plots/15_10_19.png)
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2019/15_10_19_plots/15_10_19.png) --->
 
 ***
 
