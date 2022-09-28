@@ -1,0 +1,542 @@
+---
+title: "Week37_2022"
+format: html
+editor: visual
+---
+
+```{r}
+
+bigfoot <- tidytuesdayR::tt_load(2022, week = 37)
+bigfoot_data <- bigfoot$bigfoot
+
+```
+
+# Load packages
+
+```{r}
+#| message: false
+library(ggplot2) # For plotting
+library(dplyr) # Data wrangling
+library(geodata) # Download geographic data
+library(showtext) # Use custom fonts
+library(stars) # Plot rasters with ggplot
+library(SSDM) # Create species distribution maps
+library(raster) #We also need raster objects for the species dist modelling pkg
+library(geomtextpath) # Create curved text paths
+library(ggforce) # Add circles and ellipses to plots
+library(ggtext) # Richtext
+library(sf) # For spatial analysis
+library(rnaturalearth) # Country borders
+
+showtext::showtext_auto()
+showtext_opts(dpi = 600) # Makes sure the text is same res as plot
+## https://fonts.adobe.com/fonts/bungee
+sysfonts::font_add(family = "Bungee",
+                   regular = "Bungee2.otf",
+                   bold = "Bungee.otf")
+## https://fonts.adobe.com/fonts/obliqua-sans
+sysfonts::font_add(family = "Obliqua",
+                   regular = "Obliqua_regular.otf",
+                   bold = "Obliqua_bold.otf")
+```
+
+Download temperature, rainfall, elevation, and tree cover data.
+
+```{r}
+tempdata <- geodata::worldclim_global(var = "tavg", res = 10,
+                                      path = here::here("./R/2022/data"))
+
+#We convert to a raster object (rather than terra) because
+#the species dist modelling pkg doesn't recognise terra object
+tempdata1 <- raster(tempdata$wc2.1_10m_tavg_01)
+```
+
+```{r}
+raindata <- geodata::worldclim_global(var = "prec", res = 10,
+                                      path = here::here("./R/2022/data"))
+
+raindata1 <- raster(raindata$wc2.1_10m_prec_01)
+```
+
+```{r}
+treedata <- geodata::landcover(var = "trees",
+                               path = here::here("./R/2022/data"))
+
+treedata_raster <- raster(treedata)
+```
+
+For elevation data get both global elevation (lower resolution) and elevation for US lower 48 states (higher resolution).
+
+```{r}
+elev_data <- elevation_global(10,
+                              path = here::here("./R/2022/data"))
+
+elevdata_raster <- raster(elev_data)
+
+elev_data_USA <- geodata::elevation_30s(country = "United States of America",
+                                        path = here::here("./R/2022/data"))
+
+elevdata_raster_USA <- raster(elev_data_USA)
+```
+
+Extract state and country borders. We will create two separate spatial objects: lower 48 states and all N. America (Canada, US, Mexico).
+
+```{r}
+## Extract borders of all US states
+states <- tigris::states(cb = TRUE) %>% 
+  ## Remove islands, we are only dealing with continental states
+  dplyr::filter(!grepl(x = NAME, pattern = "Puerto Rico|Hawaii|Mariana|Samoa|Virgin Islands|Guam"))
+
+#Extract borders of Canada and Mexico
+Canada <- rnaturalearth::ne_countries(country = "Canada",
+                                      scale = "medium",
+                                      returnclass = "sf") %>% 
+  dplyr::select(geometry) %>% 
+  sf::st_transform(crs = sf::st_crs(states))
+
+Mexico <- rnaturalearth::ne_countries(country = "Mexico",
+                                      scale = "medium",
+                                      returnclass = "sf") %>% 
+  dplyr::select(geometry) %>% 
+  sf::st_transform(crs = sf::st_crs(states))
+
+#Lower 48 states
+lower48_geo <- states %>% 
+  filter(NAME != "Alaska") %>% 
+  summarise() %>% 
+  #Downscale a bit so it's easier to work with
+  sf::st_simplify(dTolerance = 1000)
+
+#All of N. America
+NAmerica_geo <- states %>% 
+  dplyr::select(geometry) %>% 
+  rbind(Canada) %>% 
+  rbind(Mexico) %>% 
+  summarise() %>% 
+  #Downscale a bit so it's easier to work with
+  sf::st_simplify(dTolerance = 1000)
+
+#Crop out the parts of Alaska that cross the date line
+#This is a quick and dirty approach
+lower48_geo <- lower48_geo %>% 
+  sf::st_crop(xmin = -180, ymin = 0,
+              xmax = -40, ymax = 85)
+NAmerica_geo <- NAmerica_geo %>% 
+  sf::st_crop(xmin = -180, ymin = 0,
+              xmax = -40, ymax = 85)
+
+#Reproject both objects into NAD 1983 Lambert North America
+#These will be used for plotting
+lower48_proj <- lower48_geo %>% 
+  sf::st_transform("ESRI:102009")
+
+NAmerica_proj <- NAmerica_geo %>% 
+  sf::st_transform("ESRI:102009")
+```
+
+## Crop environmental rasters to country borders
+
+This can take some time. If we already have the output data saved, just load it.
+
+```{r}
+
+if (file.exists(here::here("./R/2022/data/USA_rasterstack.RDS"))) {
+  
+  raster_stack_USA <- readRDS(here::here("./R/2022/data/USA_rasterstack.RDS"))
+  
+  raster_stack_NAmerica <- readRDS(here::here("./R/2022/data/NAmerica_rasterstack.RDS"))
+  
+} else {
+  
+  # Crop and mask elevation raster
+  # I have found cropping first before masking tends to be quicker...not sure if this is universally true!!
+  # Keep these rasters in original CRS to crop others below, then we will project
+  elevdata_USA_border <- raster::mask(raster::crop(elevdata_raster_USA, lower48_geo),
+                                      mask = lower48_geo)
+  elevdata_NAmerica_border <- raster::mask(raster::crop(elevdata_raster, NAmerica_geo),
+                                           mask = NAmerica_geo)
+  
+  tempdata1_USA_border <- raster::mask(raster::crop(tempdata1, lower48_geo), mask = lower48_geo)
+  ## Rasters are slightly different resolution. Need them all same extent and resolution to create raster stack and species distribution model, so we resample
+  tempdata1_USA_border <- raster::resample(tempdata1_USA_border, elevdata_USA_border) %>% 
+    ## Reproject to projected CRS
+    raster::projectRaster(crs = "ESRI:102009")
+  
+  tempdata1_NAmerica_border <- raster::mask(raster::crop(tempdata1, NAmerica_geo), mask = NAmerica_geo)
+  tempdata1_NAmerica_border <- raster::resample(tempdata1_NAmerica_border, elevdata_NAmerica_border) %>% 
+    raster::projectRaster(crs = "ESRI:102009")
+  
+  raindata1_USA_border <- raster::mask(raster::crop(raindata1, lower48_geo), mask = lower48_geo)
+  raindata1_USA_border <- raster::resample(raindata1_USA_border, elevdata_USA_border) %>% 
+    raster::projectRaster(crs = "ESRI:102009")
+  
+  raindata1_NAmerica_border <- raster::mask(raster::crop(raindata1, NAmerica_geo), mask = NAmerica_geo)
+  raindata1_NAmerica_border <- raster::resample(raindata1_NAmerica_border, elevdata_NAmerica_border) %>% 
+    raster::projectRaster(crs = "ESRI:102009")
+  
+  treedata_USA_border <- raster::mask(raster::crop(treedata_raster, lower48_geo), mask = lower48_geo)
+  treedata_USA_border <- raster::resample(treedata_USA_border, elevdata_USA_border) %>% 
+    raster::projectRaster(crs = "ESRI:102009")
+  
+  treedata_NAmerica_border <- raster::mask(raster::crop(treedata_raster, NAmerica_geo), mask = NAmerica_geo)
+  treedata_NAmerica_border <- raster::resample(treedata_NAmerica_border, elevdata_NAmerica_border) %>% 
+    raster::projectRaster(crs = "ESRI:102009")
+  
+  raster_stack_USA <- raster::stack(tempdata1_USA_border,
+                                    raindata1_USA_border,
+                                    treedata_USA_border,
+                                    # Reproject our elevation data in the end so everything matches
+                                    elevdata_USA_border %>% 
+                                      raster::projectRaster(crs = "ESRI:102009"))
+  
+  saveRDS(object = raster_stack_USA,
+          file = here::here("./R/2022/data/USA_rasterstack.RDS"))
+  
+  raster_stack_NAmerica <- raster::stack(tempdata1_NAmerica_border,
+                                         raindata1_NAmerica_border,
+                                         treedata_NAmerica_border,
+                                         elevdata_NAmerica_border %>% 
+                                           raster::projectRaster(crs = "ESRI:102009"))
+  
+  saveRDS(object = raster_stack_NAmerica,
+          file = here::here("./R/2022/data/NAmerica_rasterstack.RDS"))
+  
+}
+
+```
+
+Clean sightings data
+
+```{r}
+sightings <- bigfoot_data %>% 
+  #Also exclude ones without coordinates
+  filter(!is.na(latitude) & !is.na(longitude)) %>% 
+  mutate(SPECIES = "Biggus footus") %>% #Needed for SSDM package
+  dplyr::select(SPECIES, LATITUDE = latitude, LONGITUDE = longitude) %>% 
+  sf::st_as_sf(., coords = c("LONGITUDE", "LATITUDE")) %>%
+  sf::st_set_crs("EPSG:4326") %>%
+  sf::st_transform("ESRI:102009") %>% 
+  sf::st_filter(lower48_proj)
+```
+
+Check the sightings look reasonable...
+
+```{r}
+ggplot() +
+  geom_sf(data = lower48_proj) +
+  geom_sf(data = sightings)
+```
+
+Conduct species distribution modelling. Again, this can be a bit slow so we load the data if it exists.
+
+```{r}
+
+if (file.exists(here::here("./R/2022/data/data_Week37.RDS"))) {
+  
+  distribution_stars <- readRDS(here::here("./R/2022/data/data_Week37.RDS"))
+  
+} else {
+  ## SSDM needs a df with coord cols for sightings
+  sightings_df <- sightings %>% 
+    dplyr::bind_cols(sf::st_coordinates(.)) %>% 
+    dplyr::rename(LONGITUDE = X, LATITUDE = Y)
+  
+  ## Run SSDM using 3 different methods...
+  #In theory you can provide vector of methods, but doesn't work
+  ## NOTE!!!!! WHILE I UNDERSTAND THE CONCEPTS OF SPECIES DISTRIBUTION MODELLING I AM NOT AN EXPERT AND THIS DATA IS NOT IDEAL. THIS IS MOSTLY A DATA VIZ TASK SO DON'T USE THIS CODE AS A GUIDE FOR SPECIES DISTRIBUTION MODELLING WITH REAL DATA!
+  SDM_GLM <- modelling("GLM",
+                       Occurrences = sightings_df %>% 
+                         sf::st_drop_geometry(),
+                       Env = raster_stack_USA,
+                       Xcol = 'LONGITUDE', Ycol = 'LATITUDE', verbose = FALSE)
+  
+  SDM_MARS <- modelling("MARS",
+                        Occurrences = sightings_df %>% 
+                          sf::st_drop_geometry(),
+                        Env = raster_stack_USA,
+                        Xcol = 'LONGITUDE', Ycol = 'LATITUDE', verbose = FALSE)
+  
+  SDM_CTA <- modelling("CTA",
+                       Occurrences = sightings_df %>% 
+                         sf::st_drop_geometry(),
+                       Env = raster_stack_USA,
+                       Xcol = 'LONGITUDE', Ycol = 'LATITUDE', verbose = FALSE)
+  
+  ## Use Fisher's combined probability to combine probabilities from all 3 methods
+  ## (https://en.wikipedia.org/wiki/Fisher%27s_method)
+  fishers_combined <- -2 * (log(SDM_MARS@projection) + log(SDM_GLM@projection) + log(SDM_CTA@projection))
+  
+  func <- function(x){
+    1 - pchisq(q = x, df = 6)
+  }
+  fishers_combined_pval <- raster::calc(fishers_combined, fun = func)
+  
+  #Finally, convert our output to stars because it's easier to work with in ggplot
+  distribution_stars <- stars::st_as_stars(fishers_combined_pval)
+  
+  saveRDS(object = distribution_stars, file = here::here("./R/2022/data/data_Week37.RDS"))
+  
+}
+```
+
+# PLOT
+
+## PLOT 1 (Just USA)
+
+First, we plot species distribution model just within the lower 48 states. We want to flag the great plains and everglades as areas with low probability of sightings.
+
+```{r}
+## Add coordinates to create a curved line with test
+#(geom_textcurve from geomtextpath package)
+greatplains_path <- data.frame(LAT = c(34.255512, 46.950201),
+                               LONG = c(-101.578533, -101.008695)) %>% 
+  sf::st_as_sf(coords = c("LONG", "LAT")) %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  ## Convert to projected CRS for our maps
+  sf::st_transform("ESRI:102009") %>% 
+  dplyr::bind_cols(sf::st_coordinates(.))
+
+## Create point where for everglades that can be circled
+everglades_point <- data.frame(LONG = -81.001861, LAT = 25.828729) %>% 
+  sf::st_as_sf(coords = c("LONG", "LAT")) %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_transform("ESRI:102009") %>% 
+  dplyr::bind_cols(sf::st_coordinates(.)) 
+```
+
+```{r}
+final_map <- ggplot() +
+  ## Plot our stars raster with probabilty of sightings
+  geom_stars(data = distribution_stars %>% 
+               #Downsample so it's less heavy!
+               stars::st_downsample(n =  5),
+             #NAs are blank
+             na.action = na.omit) + 
+  #Plot US state boundaries
+  geom_sf(data = states %>% filter(NAME != "Alaska"), fill = NA, colour = "black", size = 0.2) +
+  #Add text to highlight great plains
+  geom_textcurve(aes(x = greatplains_path$X[1], xend = greatplains_path$X[2],
+                     y = greatplains_path$Y[1], yend = greatplains_path$Y[2], label = "   GREAT   PLAINS   "),
+                 size = 4.5, curvature = 0.15,
+                 family = "Obliqua") +
+  #Add circle and text to highlight everglades
+  geom_circle(data = everglades_point,
+              aes(x0 = X, y0 = Y,
+                  r = 200000),
+              fill = NA, colour = "black") +
+  geom_richtext(data = everglades_point,
+                aes(x = X + 450000, y = Y + 250000,
+                    label = "EVERGLADES"),
+                family = "Obliqua",
+                label.colour = NA,
+                fill = NA, size = 4.5) +
+  #Add title, subtitle, and caption
+  labs(title = "Where's Bigfoot?",
+       subtitle = stringr::str_replace_all(stringr::str_wrap(string = "There have been over 4,000 geolocated sightings of bigfoot in the lower 48 states of the US, but what type of habitat is bigfoot most likely to occur in? In this map we estimate the probability to observe bigfoot based on the local temperature and rainfall (worldclim.org), elevation (srtm.csi.cgiar.org), and tree cover (esa-worldcover.org). We predict bigfoot sightings to be more likely in forested areas along the East and West coast of the US, while sightings across the Great Plains and within the Everglades are much less likely.", width = 90), pattern = "\n", replacement = "<br>"),
+       caption = "Plot: @ldbailey255 | Data: Bigfoot Field Researchers Organization (bfro.net)"
+  ) +
+  ## Colour brewer Greens scale
+  # Doing manually because scale_fill_distiller seemed to have bugs with sf or stars (investigating)
+  scale_fill_gradientn(colours = c("#f7fcf5", "#e5f5e0", "#c7e9c0", "#a1d99b", "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b"),
+                       limits = c(0, 1),
+                       guide = guide_colourbar(nbin = 300,
+                                               frame.colour = "black",
+                                               ticks = FALSE,
+                                               title.position = "top", title.hjust = 0.5),
+                       breaks = c(0, 1),
+                       labels = c("Low<br>probability", "High<br>probability"),
+                       name = "Sighting<br>probability") +
+  # Fix limits of plot using projected coordinates
+  coord_sf(crs = "ESRI:102009", clip = "off",
+           xlim = c(-2227000, 2124000),
+           ylim = c(-1528000, 1233000)) +
+  theme_void() +
+  theme(legend.position = c(0.15, 0.15),
+        legend.title = element_markdown(size = 10,
+                                        lineheight = 1.1,
+                                        family = "Obliqua",
+                                        face = "bold"),
+        legend.text = element_markdown(size = 9, lineheight = 1.1, family = "Obliqua"),
+        legend.key.width = unit(1, units = "cm"),
+        legend.direction = "horizontal",
+        plot.title = element_markdown(size = 30,
+                                      margin = margin(b = 15),
+                                      family = "Bungee", face = "bold"),
+        plot.subtitle = element_markdown(size = 11, lineheight = 1.1,
+                                         margin = margin(b = 10),
+                                         family = "Obliqua", colour = "black"),
+        plot.caption = element_markdown(size = 7, family = "Obliqua", colour = "black"),
+        plot.margin = margin(l = 30, r = 30,
+                             b = 30, t = 30),
+        plot.background = element_rect(fill = "#fafafa",
+                                       colour = NA),
+        panel.background = element_rect(fill = "#fafafa",
+                                        colour = NA))
+
+ggsave(plot = final_map,
+       filename = here::here("./plots/2022/Week37.png"), dpi = 600,
+       width = 8, height = 7)
+```
+
+## PLOT 2 (project SDM across N. America)
+
+Now that we have calculated a species distribution models, we can project where else we might expect to find bigfoot. We'll search across N. America (include Canada, Alaska, and Mexico)
+
+```{r}
+
+#Change name of layers in our raster to match our original
+names(raster_stack_NAmerica)[4] <- names(raster_stack_USA)[4]
+
+#Project bigfoot habitat using each of our 3 methods...
+proj_GLM <- project(obj = SDM_GLM, Env = raster_stack_NAmerica)
+proj_MARS <- project(obj = SDM_MARS, Env = raster_stack_NAmerica)
+proj_CTA <- project(obj = SDM_CTA, Env = raster_stack_NAmerica)
+
+#Again, combine them using Fishers combined probability test
+fishers_combined <- -2 * (log(proj_GLM@projection) + log(proj_MARS@projection) + log(proj_CTA@projection))
+
+func <- function(x){
+  1 - pchisq(q = x, df = 6)
+}
+fishers_combined_pval <- raster::calc(fishers_combined, fun = func)
+
+#Convert to stars and save
+proj_distribution_stars <- stars::st_as_stars(fishers_combined_pval)
+
+saveRDS(object = proj_distribution_stars, file = here::here("./R/2022/data/data_Week37_plot2.RDS")) 
+```
+
+This time we want to annotate on the Pacific N.W. and Yucatan penninsula.
+
+```{r}
+PacificNW_point <- data.frame(LONG = -127.101442, LAT = 52.664462) %>% 
+  sf::st_as_sf(coords = c("LONG", "LAT")) %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_transform("ESRI:102009") %>% 
+  dplyr::bind_cols(sf::st_coordinates(.)) %>% 
+  mutate(label = "PACIFIC NORTHWEST")
+
+Yucatan_point <- data.frame(LONG = -88.140982, LAT = 20.291910) %>% 
+  sf::st_as_sf(coords = c("LONG", "LAT")) %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_transform("ESRI:102009") %>% 
+  dplyr::bind_cols(sf::st_coordinates(.)) %>% 
+  mutate(label = "YUCATAN")
+
+#We also want to manually add the subtitle we it can sit tightly against our map
+subtitle_location <- data.frame(LONG = 175.820388,
+                                LAT = 76) %>% 
+  sf::st_as_sf(coords = c("LONG", "LAT")) %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_transform("ESRI:102009") %>% 
+  dplyr::bind_cols(sf::st_coordinates(.))
+```
+
+Load all lakes to add great lakes to map
+
+```{r}
+#| message: false
+lakes <- rnaturalearth::ne_download(type = "lakes", destdir = tempdir(), category = "physical", scale = 10, returnclass = "sf") %>% 
+  filter(grepl(x = tolower(name),
+               pattern = c("superior|michigan|huron|erie|ontario")))
+```
+
+```{r}
+final_map_proj <- ggplot() +
+  # Plot our new extrapolated raster
+  #Downsampling not needed here because it's already at lower res
+  #because we used global elev data
+  geom_stars(data = proj_distribution_stars, na.action = na.omit) + 
+  # Add borders of US, Mexico, and Canada
+  geom_sf(data = lower48_proj, fill = NA, colour = "black", size = 0.2) +
+  geom_sf(data = states %>% filter(NAME == "Alaska"), fill = NA, colour = "black", size = 0.2) +
+  geom_sf(data = Mexico, fill = NA, colour = "black", size = 0.2) +
+  geom_sf(data = Canada, fill = NA, colour = "black", size = 0.2) +
+  #Add great lakes above
+  geom_sf(data = lakes,
+          colour = "black", size = 0.2,
+          fill = "#e8f4f8") +
+  # Add an ellipse and text to highlight Pacific N.W.
+  geom_ellipse(data = PacificNW_point,
+               #x0 and y0 are centre of our ellipse
+               aes(x0 = X, y0 = Y,
+                   #a and b denote the length and width (in CRS units i.e. meters)
+                   a = 600000, b = 300000,
+                   #Angle of ellipse
+                   angle = -pi / 2.5,
+                   #How curved are the edges
+                   m1 = 3
+               ),
+               fill = NA, colour = "black") +
+  geom_richtext(data = PacificNW_point,
+                aes(x = X - 350000, y = Y - 350000,
+                    label = "PACIFIC<br>NORTHWEST"),
+                family = "Obliqua",
+                label.colour = NA,
+                fill = NA, size = 4.5, hjust = 1) +
+  ## Add circle and text to highlight Yucatan
+  geom_circle(data = Yucatan_point,
+              aes(x0 = X, y0 = Y,
+                  r = 300000),
+              fill = NA, colour = "black") +
+  geom_richtext(data = Yucatan_point,
+                aes(x = X + 890000, y = Y - 300000,
+                    label = "YUCATAN"),
+                family = "Obliqua",
+                label.colour = NA,
+                fill = NA, size = 4.5) +
+  #Add title and caption (subtitle added manually below)
+  labs(title = "Where to find Bigfoot next?",
+       caption = "Plot: @ldbailey255 | Data: Bigfoot Field Researchers Organization (bfro.net)"
+  ) +
+  # Add subtitle manually to fit around the map
+  geom_richtext(data = subtitle_location,
+                #Had issue getting reasonable X coord when picking a point with WGS84...
+                #Probably b/c I'm at the edge of where this CRS is designed for
+                #Had to add manually
+                aes(x = -5270690, y = Y,
+                    label = "Extrapolation of potential bigfoot habitat across North America.<br>Based on where bigfoot sightings occur in the US, we would<br>predict possible new sightings in the Pacific Northwest<br>of Canada and Mexico's Yucatan penninsula."),
+                family = "Obliqua",
+                label.colour = NA,
+                fill = NA, size = 3.5,
+                hjust = 0) +
+  ## Colour brewer Greens scale (see my comment above about potential scale_fill_distiller bug)
+  scale_fill_gradientn(colours = c("#f7fcf5", "#e5f5e0", "#c7e9c0", "#a1d99b", "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b"),
+                       limits = c(0, 1),
+                       guide = guide_colourbar(nbin = 300,
+                                               frame.colour = "black",
+                                               ticks = FALSE,
+                                               title.position = "top",
+                                               title.hjust = 0.5),
+                       breaks = c(0, 1),
+                       labels = c("Low<br>probability", "High<br>probability"),
+                       name = "Sighting<br>probability") +
+  coord_sf(crs = "ESRI:102009", clip = "off",
+           xlim = c(-4044592, 1576582)) +
+  theme_void() +
+  theme(legend.position = c(0.15, 0.15),
+        legend.title = element_markdown(size = 10,
+                                        family = "Obliqua",
+                                        face = "bold",
+                                        lineheight = 1.1),
+        legend.text = element_markdown(size = 9, lineheight = 1.1, family = "Obliqua"),
+        legend.key.width = unit(0.75, units = "cm"),
+        legend.direction = "horizontal",
+        plot.title = element_markdown(size = 20,
+                                      margin = margin(b = 15,
+                                                      l = -40), family = "Bungee", face = "bold"),
+        plot.subtitle = element_markdown(size = 11, lineheight = 1.1,
+                                         margin = margin(b = 10,
+                                                         l = -40), family = "Obliqua", colour = "black"),
+        plot.caption = element_markdown(size = 7, family = "Obliqua", colour = "black", margin = margin(r = -40)),
+        plot.margin = margin(l = 30, r = 30,
+                             b = 30, t = 30),
+        plot.background = element_rect(fill = "#fafafa",
+                                       colour = NA),
+        panel.background = element_rect(fill = "#fafafa",
+                                        colour = NA))
+
+ggsave(plot = final_map_proj,
+       filename = here::here("./plots/2022/Week37_projected.png"), dpi = 600,
+       width = 6, height = 7)
+```
