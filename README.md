@@ -21,6 +21,7 @@ Quick Link
 
 <!-- toc -->
 * **2022**
+  - 2022/Week 37 [:foot: Species distribution modelling of bigfoot](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week37.png)
   - 2022/Week 33 [:tv: Average 'kindness' metric of different movie/TV universes](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week33.png)
   - 2022/Week 32 [:ferris_wheel: Number of ferris wheels built over time](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week32.png)
   - 2022/Week 31 [:frog: Movement of frogs in Crane Prairie Reservoir, USA](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week31.png)
@@ -51,6 +52,13 @@ Quick Link
 <!-- tocstop -->
 
 </details>
+
+***
+
+### [2022/Week 37](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week37.png) :foot: Species distribution modelling of bigfoot
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week37.png)
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week37_projected.png)
 
 ***
 
