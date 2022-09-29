@@ -5,4 +5,6 @@
 inst/doc
 .DS_Store
 /plots/2022/Week24_gif/
-*.rds
+*.RDS
+*.tif
+*.txt
