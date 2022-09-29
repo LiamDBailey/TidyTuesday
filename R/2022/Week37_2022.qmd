@@ -332,7 +332,7 @@ final_map <- ggplot() +
                 fill = NA, size = 4.5) +
   #Add title, subtitle, and caption
   labs(title = "Where's Bigfoot?",
-       subtitle = stringr::str_replace_all(stringr::str_wrap(string = "There have been over 4,000 geolocated sightings of bigfoot in the lower 48 states of the US, but what type of habitat is bigfoot most likely to occur in? In this map we estimate the probability to observe bigfoot based on the local temperature and rainfall (worldclim.org), elevation (srtm.csi.cgiar.org), and tree cover (esa-worldcover.org). We predict bigfoot sightings to be more likely in forested areas along the East and West coast of the US, while sightings across the Great Plains and within the Everglades are much less likely.", width = 90), pattern = "\n", replacement = "<br>"),
+       subtitle = stringr::str_replace_all(stringr::str_wrap(string = "There have been over 4,000 geolocated sightings of bigfoot in the lower 48 states of the US, but what type of habitat is bigfoot most likely to occur in? In this map we estimate the probability to observe bigfoot based on the local average temperature and rainfall (worldclim.org), elevation (srtm.csi.cgiar.org), and tree cover (esa-worldcover.org) of previous sightings. We predict bigfoot sightings to be more likely in forested areas along the East and West coast of the US, while sightings across the Great Plains and within the Everglades are much less likely.", width = 90), pattern = "\n", replacement = "<br>"),
        caption = "Plot: @ldbailey255 | Data: Bigfoot Field Researchers Organization (bfro.net)"
   ) +
   ## Colour brewer Greens scale
@@ -345,7 +345,7 @@ final_map <- ggplot() +
                                                title.position = "top", title.hjust = 0.5),
                        breaks = c(0, 1),
                        labels = c("Low<br>probability", "High<br>probability"),
-                       name = "Sighting<br>probability") +
+                       name = "Occurrence<br>probability") +
   # Fix limits of plot using projected coordinates
   coord_sf(crs = "ESRI:102009", clip = "off",
            xlim = c(-2227000, 2124000),
@@ -384,26 +384,34 @@ Now that we have calculated a species distribution models, we can project where 
 
 ```{r}
 
-#Change name of layers in our raster to match our original
-names(raster_stack_NAmerica)[4] <- names(raster_stack_USA)[4]
-
-#Project bigfoot habitat using each of our 3 methods...
-proj_GLM <- project(obj = SDM_GLM, Env = raster_stack_NAmerica)
-proj_MARS <- project(obj = SDM_MARS, Env = raster_stack_NAmerica)
-proj_CTA <- project(obj = SDM_CTA, Env = raster_stack_NAmerica)
-
-#Again, combine them using Fishers combined probability test
-fishers_combined <- -2 * (log(proj_GLM@projection) + log(proj_MARS@projection) + log(proj_CTA@projection))
-
-func <- function(x){
-  1 - pchisq(q = x, df = 6)
+if (file.exists(here::here("./R/2022/data/data_Week37_plot2.RDS"))) {
+  
+  proj_distribution_stars <- readRDS(here::here("./R/2022/data/data_Week37_plot2.RDS")) 
+  
+} else {
+  
+  #Change name of layers in our raster to match our original
+  names(raster_stack_NAmerica)[4] <- names(raster_stack_USA)[4]
+  
+  #Project bigfoot habitat using each of our 3 methods...
+  proj_GLM <- project(obj = SDM_GLM, Env = raster_stack_NAmerica)
+  proj_MARS <- project(obj = SDM_MARS, Env = raster_stack_NAmerica)
+  proj_CTA <- project(obj = SDM_CTA, Env = raster_stack_NAmerica)
+  
+  #Again, combine them using Fishers combined probability test
+  fishers_combined <- -2 * (log(proj_GLM@projection) + log(proj_MARS@projection) + log(proj_CTA@projection))
+  
+  func <- function(x){
+    1 - pchisq(q = x, df = 6)
+  }
+  fishers_combined_pval <- raster::calc(fishers_combined, fun = func)
+  
+  #Convert to stars and save
+  proj_distribution_stars <- stars::st_as_stars(fishers_combined_pval)
+  
+  saveRDS(object = proj_distribution_stars, file = here::here("./R/2022/data/data_Week37_plot2.RDS"))
+  
 }
-fishers_combined_pval <- raster::calc(fishers_combined, fun = func)
-
-#Convert to stars and save
-proj_distribution_stars <- stars::st_as_stars(fishers_combined_pval)
-
-saveRDS(object = proj_distribution_stars, file = here::here("./R/2022/data/data_Week37_plot2.RDS")) 
 ```
 
 This time we want to annotate on the Pacific N.W. and Yucatan penninsula.
@@ -510,7 +518,7 @@ final_map_proj <- ggplot() +
                                                title.hjust = 0.5),
                        breaks = c(0, 1),
                        labels = c("Low<br>probability", "High<br>probability"),
-                       name = "Sighting<br>probability") +
+                       name = "Occurrence<br>probability") +
   coord_sf(crs = "ESRI:102009", clip = "off",
            xlim = c(-4044592, 1576582)) +
   theme_void() +
