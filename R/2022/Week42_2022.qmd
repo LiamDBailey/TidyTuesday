@@ -1,0 +1,247 @@
+---
+title: "Week42"
+format: html
+editor: visual
+---
+
+```{r}
+
+stranger_things <- tidytuesdayR::tt_load(2022, week = 42)
+episodes <- stranger_things$episodes
+dialogue <- stranger_things$stranger_things_all_dialogue
+
+```
+
+# Load packages
+
+```{r}
+#| message: false
+library(ggplot2) # For plotting
+library(dplyr) # Data wrangling
+library(skimr)
+library(showtext)
+library(tidytext) #For NLP
+library(textdata) #Data for sentiment analysis
+library(ggstream)
+library(cowplot)
+library(png)
+library(ggtext)
+library(grid)
+
+showtext::showtext_auto()
+showtext_opts(dpi = 600) # Makes sure the text is same res as plot
+## https://fonts.adobe.com/fonts/bungee
+sysfonts::font_add(family = "Benguiat",
+                   regular = "Benguiat_pro_medium.otf",
+                   bold = "Benguiat_pro_bold.otf")
+```
+
+# Explore data
+
+```{r}
+skim(episodes)
+```
+
+```{r}
+skim(dialogue)
+```
+
+```{r}
+head(dialogue)
+```
+
+There are quite a lot of *sounds*. We will focus just on dialogue.
+
+```{r}
+sounds <- dialogue %>% 
+  filter(is.na(dialogue))
+
+music <- dialogue %>% 
+  filter(grepl(x = dialogue, pattern = "♪") | stringr::str_detect(string = dialogue, pattern = "playing]$"))
+
+dialogue <- dialogue %>% 
+  filter(!is.na(dialogue) & dialogue != " " & !grepl(x = dialogue, pattern = "♪") & !stringr::str_detect(string = dialogue, pattern = "playing]$"))
+```
+
+```{r}
+tail(dialogue, n = 20)
+```
+
+Remove unneeded columns and tokenize the data
+
+```{r}
+dialogue_tokenize <- dialogue %>% 
+  select(season, episode, start_time, end_time, dialogue) %>%  
+  tidytext::unnest_tokens(word, dialogue)
+```
+
+Get sentiments for tokens after removing stop words
+
+```{r}
+token_sentiment <- dialogue_tokenize %>% 
+  #Remove stop words
+  anti_join(stop_words, by = "word") %>% 
+  left_join(get_sentiments(lexicon = "nrc"), by = "word") %>% 
+  #Remove tokens with the sentiment
+  filter(!is.na(sentiment))
+```
+
+Add episode information.
+
+```{r}
+token_sentiment_full <- token_sentiment %>% 
+  left_join(episodes, by = c("season", "episode"))
+```
+
+# Plot
+
+## Main plot
+
+Create data frame that works for all episodes/seasons. Missing episodes are just all 0s.
+
+```{r}
+count_data <- token_sentiment_full %>% 
+  #Group by minute
+  mutate(minute = lubridate::minute(start_time)) %>% 
+  group_by(season, episode, minute, sentiment) %>% 
+  count() %>% 
+  ungroup()
+
+max_times <- token_sentiment_full %>% 
+  mutate(minute = lubridate::minute(start_time)) %>% 
+  group_by(season, episode) %>% 
+  summarise(max_time = max(minute), .groups = "drop")
+
+max_times_fillNA <- expand.grid(season = 1:4, episode = 1:9) %>% 
+  left_join(max_times, by = c("season", "episode")) %>% 
+  mutate(max_time = tidyr::replace_na(max_time, 45))
+
+full_scaffold <- purrr::pmap_df(.l = max_times_fillNA,
+                                .f = function(season, episode, max_time){
+                                  expand.grid(season = season,
+                                              episode = episode,
+                                              sentiment = unique(token_sentiment_full$sentiment),
+                                              minute = 0:max_time)
+                                })
+
+plot_data <- full_scaffold %>% 
+  left_join(count_data, by = c("season", "episode", "minute", "sentiment")) %>% 
+  mutate(n = tidyr::replace_na(n, 0)) %>% 
+  #Order sentiments by positive/negative rather than alphabetical
+  mutate(sentiment = forcats::fct(sentiment, levels = c("anticipation", "surprise", "trust", "joy", "positive", "negative", "anger", "disgust", "fear", "sadness"))) %>%
+  group_by(season, episode) %>% 
+  mutate(minute_scale = minute/max(minute))
+
+full_facet <- ggplot(data = plot_data) +
+  geom_stream(aes(x = minute_scale, y = n, fill = sentiment),
+              colour = "grey10", size = 0, type = "proportional") +
+  # geom_hline(yintercept = 0.5, colour = "grey95", size = 0.75, lty = 2) +
+  coord_equal(expand = FALSE) +
+  scale_fill_manual(values = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5", "#08519c", "#a50f15", "#de2d26", "#fb6a4a", "#fcae91", "#fee5d9")) +
+  facet_wrap(facets = ~season + episode, ncol = 9, nrow = 4) +
+  theme_void() +
+  theme(legend.position = "none",
+        # panel.background = element_rect(colour = "grey10", size = 3),
+        plot.background = element_blank(),
+        strip.background = element_blank(), strip.text.x = element_blank(),
+        axis.line = element_blank())
+```
+
+```{r}
+
+img <- readPNG("~/Desktop/git_projects/TidyTuesday/R/2022/data/Stranger_things_logo_PNG2.png", native = TRUE)
+
+# converting to raster image
+title <- rasterGrob(img, interpolate = TRUE)
+
+season_labels <- data.frame(x = 0.1, y = seq(0.15, 0.535, length.out = 4),
+                            label = paste0("Season ", 4:1))
+episode_labels <- data.frame(x = seq(0.1875, 0.815, length.out = 9),
+                             y = 0.625,
+                             label = paste0("Episode ", 1:9))
+
+library(htmltools)
+negative <- function(...) span(..., style = css(color = "#a50f15", font_size = "12pt"))
+positive <- function(...) span(..., style = css(color = "#08519c", font_size = "12pt"))
+large <- function(...) span(..., style = css(font_size = "12pt"))
+
+ggdraw(clip = "off") +
+  draw_plot(full_facet, x = 0, y = 0.1, width = 1, height = 0.5) +
+  geom_richtext(data = season_labels,
+                aes(x = x, y = y, label = label),
+                family = "Benguiat", size = 3, colour = "#a50f15",
+                label.colour = NA, fill = NA, fontface = "bold") +
+  geom_richtext(data = episode_labels,
+                aes(x = x, y = y, label = label),
+                family = "Benguiat", size = 2, colour = "#a50f15",
+                label.colour = NA, fill = NA, fontface = "bold") +
+  geom_richtext(aes(x = 0.5, y = 0.75),
+                label = paste("Sentiment analysis of STRANGER THINGS episode dialogue.<br> Dialogue words are classified into 10 different categories that can be considered<br><br>", positive("POSITIVE"), large("or"), negative("NEGATIVE.")),
+                family = "Benguiat", size = 1.95,
+                colour = "grey10",
+                label.colour = NA, fill = NA, hjust = 0.5, lineheight = 1.2) +
+  geom_richtext(aes(x = 0.99, y = 0.025),
+                label = "Plot: @ldbailey255 | Data: 8flix.com<br>Sentiment data from NRC Word-Emotion Association Lexicon (v0.92) by Dr. Saif M. Mohammad",
+                family = "Benguiat",
+                colour = "grey75", size = 1.5,
+                label.colour = NA, fill = NA, hjust = 1) +
+  patchwork::inset_element(title,
+                           left = 0.25, right = 0.75,
+                           bottom = 0.8, top = 1)
+ggsave("~/Desktop/git_projects/TidyTuesday/plots/2022/Week42.png", dpi = 600)
+```
+
+## Legend plot
+
+```{r}
+#Extract data for episode 1
+test_data <- token_sentiment_full %>% 
+  filter(season == 1 & episode == 1) %>% 
+  #Group by minute
+  mutate(minute = lubridate::minute(start_time)) %>% 
+  group_by(minute, sentiment) %>% 
+  count() %>% 
+  ungroup()
+
+#Create empty data scaffolding
+scaffold <- expand.grid(sentiment = unique(token_sentiment_full$sentiment),
+                        minute = 0:max(test_data$minute))
+
+#Attach data to scaffold
+plot_data <- scaffold %>% 
+  left_join(test_data, by = c("minute", "sentiment")) %>% 
+  mutate(n = tidyr::replace_na(n, 0)) %>% 
+  #Order sentiments by positive/negative rather than alphabetical
+  mutate(sentiment = forcats::fct(sentiment, levels = c("anticipation", "surprise", "trust", "joy", "positive", "negative", "anger", "disgust", "fear", "sadness"))) %>%
+  mutate(minute_scale = minute/max(minute))
+
+negative <- function(...) span(..., style = css(color = "#a50f15"))
+positive <- function(...) span(..., style = css(color = "#08519c"))
+
+ggplot(data = plot_data) +
+  geom_stream(aes(x = minute_scale, y = n, fill = sentiment),
+              colour = "grey10", size = 0.05, type = "proportional") +
+  coord_equal(ratio = 1,
+              expand = FALSE, clip = "off") +
+  labs(title = "HOW TO READ THIS PLOT",
+       subtitle = paste0("Each coloured band represent the percentage of words that match a particular sentiment.<br>", negative("NEGATIVE sentiments are in shades of red."), positive(" POSITIVE sentiments are in shades of blue."), "<br>During an episode, we can see dialogue shift between positive or negative sentiment.<br>Do these shifts correspond with particular plot points?")) +
+  scale_fill_manual(values = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5", "#08519c", "#a50f15", "#de2d26", "#fb6a4a", "#fcae91", "#fee5d9")) +
+  scale_x_continuous(breaks = c(0, 1),
+                     limits = c(0, 1),
+                     labels = c("Episode<br>start", "Episode<br>end")) +
+  scale_y_continuous(breaks = c(0.015, 0.5, 0.985),
+                     labels = paste0(seq(0, 100, 50), "%")) +
+  theme_void() +
+  theme(legend.position = "none",
+        axis.text = element_markdown(family = "Benguiat",
+                                     margin = margin(t = 10), size = 7),
+        axis.text.y = element_markdown(hjust = 1, margin = margin(r = 5)),
+        plot.title = element_markdown(family = "Benguiat", face = "bold"),
+        plot.subtitle = element_markdown(family = "Benguiat",
+                                         size = 7,
+                                         margin = margin(b = 20, t = 10),
+                                         lineheight = 1.1),
+        plot.background = element_blank(),
+        plot.margin = margin(l = 25, r = 200, b = 25, t = 25))
+ggsave("~/Desktop/git_projects/TidyTuesday/plots/2022/Week42_legend.png", dpi = 600, width = 7, height = 5)
+```
