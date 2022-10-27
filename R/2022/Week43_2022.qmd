@@ -1,0 +1,190 @@
+---
+title: "Week43"
+format: html
+editor: visual
+---
+
+```{r}
+
+baking <- tidytuesdayR::tt_load(2022, week = 43)
+bakers <- baking$bakers
+
+```
+
+# Load packages
+
+```{r}
+#| message: false
+library(ggplot2) # For plotting
+library(dplyr) # Data wrangling
+library(skimr) # Explor data
+library(showtext) # Custom fonts
+library(ggmap) # Get coordinates from Google API
+library(rcartocolor) # Colour palette for map
+library(png) # Read in PNG file
+library(grid) # Convert png to grob
+library(cowplot) # Combine plots with annotation
+library(rnaturalearth) # To get UK border data
+
+showtext::showtext_auto()
+showtext_opts(dpi = 600) # Makes sure the text is same res as plot
+sysfonts::font_add_google(family = "Sacramento", name = "Sacramento")
+## https://fonts.adobe.com/fonts/dolly
+sysfonts::font_add(family = "Dolly",
+                   regular = "DollyPro1.otf")
+```
+
+# Explore data
+
+```{r}
+bakers
+```
+
+```{r}
+skim(bakers)
+```
+
+Get coordinates for hometown of all contestants.
+
+```{r}
+## Only do this once so we don't query the API excessively!!
+if (!file.exists(here::here("./R/2022/data/bakers_geocode.RDS"))) {
+  
+  if(!ggmap::has_google_key()){
+    
+    ggmap::register_google(key = readline("Enter your Google API:"))
+    
+  }
+  
+  #Use mutate_geocode to get lat/long
+  bakers_coords <- bakers %>%
+    #When somebody has 2 hometowns count both!
+    tidyr::separate(hometown, into = c("hometown1", "hometown2"), sep = "\\/", ) %>% 
+    tidyr::pivot_longer(cols = starts_with("hometown"), names_to = "hometown_nr", values_to = "hometown") %>% 
+    filter(!is.na(hometown)) %>% 
+    # Append UK to end of all hometowns to not get confused with US when geocoding (e.g. Birmingham)
+    mutate(hometown_UK = paste0(hometown, ", UK")) %>% 
+    #This will add lat/long and address information for each column
+    ggmap::mutate_geocode(hometown_UK, output = "more")
+  
+  #Save to reduce API queries
+  saveRDS(bakers_coords, here::here("./R/2022/data/bakers_geocode.RDS"))
+  
+} else {
+  
+  bakers_coords <- readRDS(here::here("./R/2022/data/bakers_geocode.RDS"))
+  
+}
+```
+
+Get UK borders
+
+```{r}
+#Download UK regional borders
+UK <- rnaturalearth::ne_states(country = "United Kingdom", returnclass = "sf") 
+```
+
+Find how many bakers are from each district/county?
+
+```{r}
+bakers_sf <- bakers_coords %>% 
+  #Filter longitude past 5E
+  #Exclude one person with hometown in Lithuania
+  #They have another UK hometown we use
+  filter(lon < 5) %>% 
+  #Convert to sf object
+  sf::st_as_sf(coords = c("lon", "lat"), crs = "EPSG:4326") 
+
+#Determine number of bakers from each REGION
+UK_numbers_region <- UK %>% 
+  #Need to include points within ~200m for cases where hometown is close to coast and might not overlap exactly
+  sf::st_join(bakers_sf, join = st_is_within_distance, dist = 200) %>% 
+  #Count number of bakers from each region
+  group_by(region) %>% 
+  summarise(n = sum(!is.na(baker)))
+
+#Do they same for countries for some annotation stats
+UK_countries <- UK %>% 
+  sf::st_join(bakers_sf, join = st_is_within_distance, dist = 200) %>% 
+  group_by(geonunit) %>% 
+  summarise(n = sum(!is.na(baker)))
+```
+
+```{r}
+#Replace 0s with NAs so they get different colour in map palette
+UK_numbers_region_NAs <- UK_numbers_region %>% 
+  mutate(n_NA = dplyr::na_if(n, y = 0))
+
+#Read in lines (used to annotate plot)
+lines <- sf::read_sf(here::here("./R/2022/data/week43_lines.shp"))
+```
+
+```{r}
+#Read in GBBO logo
+img <- readPNG(here::here("./R/2022/data/GBBO_LOGO.png"), native = TRUE)
+title <- rasterGrob(img, interpolate = TRUE)
+```
+
+```{r}
+# Create base map
+baseplot <- ggplot() +
+  geom_sf(data = UK_numbers_region_NAs, aes(fill = n_NA),
+          colour = NA,
+          size = 0.25) +
+  geom_sf(data = UK_countries,
+          fill = NA, colour = "black", size = 0.3) +
+  geom_sf(data = bakers_sf, size = 0.75, stroke = 0.3,
+          fill = "black", colour = "white", shape = 21) +
+  geom_sf(data = lines) +
+  rcartocolor::scale_fill_carto_c(type = "quantitative", palette = "SunsetDark",
+                                  na.value = "white", direction = 1, limits = c(1, 25),
+                                  breaks = seq(5, 20, 5), guide = guide_colourbar(barwidth = unit(3, "mm"), barheight = unit(20, "mm"), raster = TRUE, frame.colour = "grey10", frame.linewidth = 0.75),
+                                  name = "Number<br>of Contestants") +
+  coord_sf(clip = "off",
+           xlim = c(-13, 3)) +
+  theme_void() +
+  theme(legend.position = c(0.35, 0.2),
+        legend.title = element_markdown(hjust = 0, size = 9, family = "Dolly"),
+        legend.text.align = 0,
+        legend.text = element_markdown(family = "Dolly", size = 6),
+        plot.title = element_markdown(),
+        plot.subtitle = element_markdown())
+
+#Combine base map with annotation
+output <- ggdraw() +
+  draw_plot(baseplot) +
+  annotation_custom(title, xmin = 0.15, xmax = 0.4,
+                    ymin = 0.65, ymax = 0.9) +
+  geom_segment(aes(x = 0.3, xend = 0.4,
+                   y = 0.855, yend = 0.855),
+               size = 1.5) +
+  geom_richtext(aes(x = 0.41, y = 0.9),
+                label = "English", family = "Sacramento", size = 11,
+                label.colour = NA, fill = NA) +
+  geom_richtext(aes(x = 0.15, y = 0.525),
+                label = paste0("Contestants in Bake-off<br>have a very *English* bias.<br>",
+                               round((UK_countries$n[UK_countries$geonunit == "England"]/sum(UK_countries$n)) * 100, digits = 0), "% of bakers in<br>the show's 10 seasons<br>have come from<br>England."),
+                family = "Dolly", size = 3.5,
+                label.colour = NA, fill = NA, lineheight = 1.2, hjust = 0) +
+  geom_richtext(aes(x = c(0.7, 0.66, 0.6175),
+                    y = c(0.135, 0.5, 0.7775),
+                    label = c("LONDON", "YORKSHIRE", "SCOTLAND")),
+                family = "Dolly", size = 3,
+                label.colour = NA, fill = NA, hjust = 0) +
+  geom_richtext(aes(x = c(0.7, 0.6625, 0.6175),
+                    y = c(0.09, 0.465, 0.735),
+                    label = c("46% of contestants<br>have come from London<br>and the surrounding regions",
+                              "Yorkshire is another<br>hotspot for bakers",
+                              "North Eastern Scotland is<br>the only region in the UK<br>without a representative")),
+                family = "Dolly", size = 1.5,
+                label.colour = NA, fill = NA, hjust = 0) +
+  geom_richtext(aes(x = 0.875, y = 0, label = "Plot: @ldbailey255 | Data: {bakeoff}"),
+                colour = "grey60", fill = NA, label.colour = NA,
+                size = 2, family = "Dolly") +
+  theme(plot.margin = margin(l = -10, r = -10, b = 10, t = 10),
+        plot.background = element_rect(colour = NA, fill = "white"),
+        panel.background = element_rect(colour = NA, fill = "white"))
+
+#Save
+ggsave(plot = output, filename = here::here("./plots/2022/Week43.png"), dpi = 600, width = 6, height = 4.5)
+```
