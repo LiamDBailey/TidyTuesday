@@ -21,6 +21,7 @@ Quick Link
 
 <!-- toc -->
 * **2022**
+  - 2022/Week 43 [:cake: Bias in contestants for the Great British Bake-Off](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week43.png)
   - 2022/Week 42 [:tv::bike: Sentiment analysis of Stranger Things dialogue](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week42.png)
   - 2022/Week 37 [:foot: Species distribution modelling of bigfoot](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week37.png)
   - 2022/Week 33 [:tv: Average 'kindness' metric of different movie/TV universes](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week33.png)
@@ -53,6 +54,12 @@ Quick Link
 <!-- tocstop -->
 
 </details>
+
+***
+
+### [2022/Week 43](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week43.png) :cake: Bias in contestants for the Great British Bake-Off
+
+![](https://github.com/LiamDBailey/TidyTuesday/blob/master/plots/2022/Week43.png)
 
 ***
 
