@@ -1,0 +1,217 @@
+---
+title: "Week27_2022"
+format: html
+editor: visual
+---
+
+# Load data
+
+```{r}
+
+sf_rent <- tidytuesdayR::tt_load(2022, week = 27)
+rent_price <- sf_rent$rent
+
+```
+
+# Load packages
+
+```{r}
+#| message: false
+library(ggplot2) # For plotting
+library(dplyr) # Data wrangling
+library(skimr) # Explor data
+library(showtext) # Custom fonts
+library(rcartocolor) # Map colour palette
+library(ggfx) # To map glowing coastline
+library(rnaturalearth) # Download coastline data
+library(ggtext) # Markdown text
+library(sf) # Working with spatial objects
+
+showtext::showtext_auto()
+showtext_opts(dpi = 600) # Makes sure the text is same res as plot
+## https://fonts.adobe.com/fonts/dolly
+sysfonts::font_add(family = "Dolly",
+                   regular = "DollyPro1.otf")
+sysfonts::font_add(family = "Quicksand",
+                   regular = "Quicksand-VariableFont_wght.ttf",
+                   bold = "Quicksand-SemiBold.ttf")
+```
+
+# Explore the data
+
+```{r}
+head(rent_price)
+```
+
+```{r}
+tail(rent_price)
+```
+
+```{r}
+skim(rent_price)
+```
+
+Lat and long are not commonly available, but probably enough to create a map
+
+```{r}
+rent_price_sf <- rent_price %>% 
+  filter(if_all(.cols = c(lat, lon), .fns = function(x) !is.na(x))) %>% 
+  sf::st_as_sf(coords = c("lon", "lat"), crs = "EPSG:4326")
+
+#Only 4k this way...
+nrow(rent_price_sf)
+```
+
+# Plot
+
+Plot all data with lat/long.
+
+```{r}
+ggplot() +
+  geom_sf(data = rent_price_sf, aes(colour = price), size = 0.25) +
+  theme_void()
+```
+Some of the points are outside downtown SF. Would be good to create a mask to mask out only relevant points.
+
+Rough bounding box for bay area.
+
+```{r}
+bbox <- sf::st_bbox(c(xmin = -122.7318, xmax = -121.3,
+                      ymin = 37.3, ymax = 37.8738133),
+                    crs = "EPSG:4326")
+
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = rent_price_sf, aes(colour = price),
+          size = 0.3, alpha = 0.25) +
+  theme_void()
+```
+
+```{r}
+#Download detailed US coastline data
+US_border <- rnaturalearthhires::countries10 %>% 
+  sf::st_as_sf() %>% 
+  filter(SOVEREIGNT == "United States of America")
+
+# Categorise rent prices into 4 groups (roughly equal to quartiles)
+rent_price_sf_price <- rent_price_sf %>% 
+  filter(!is.na(price)) %>% 
+  mutate(price_fct = case_when(price < 2000 ~ "Q1",
+                               price >= 2000 & price < 3000 ~ "Q2",
+                               price >= 3000 & price < 4000 ~ "Q3",
+                               price >= 4000 ~ "Q4")) %>% 
+  group_by(price_fct) %>% 
+  mutate(price_fct_sort = mean(price)) %>% 
+  ungroup() %>% 
+  mutate(beds_fct = forcats::fct_reorder(price_fct, .x = price_fct_sort, .fun = first))
+```
+
+Create final plot
+
+```{r}
+# Remove points that seem to be in the ocean/bay
+rent_price_sf_price_crop <- rent_price_sf_price %>% 
+  sf::st_filter(US_border)
+
+ggplot() +
+  # Add coastline
+  geom_sf(data = US_border,
+          colour = "NA", size = 0.25,
+          fill = "grey10") +
+  ## Add glow around coastline
+  with_outer_glow(
+    geom_sf(data = sf::st_cast(US_border, to = "MULTILINESTRING"),
+            colour = "white", alpha = 0.25),
+    colour = "white",
+    sigma = 2,
+    expand = 5
+  ) +
+  ## Add labels Pacific Ocean, SF Bay and the plot caption
+  geom_richtext(aes(x = -122.6, y = 37.357594),
+                label = "Pacific<br>Ocean", family = "Dolly", size = 4.5,
+                colour = "grey20", alpha = 0.5,
+                fill = NA, label.colour = NA) +
+  geom_richtext(aes(x = -122.271635, y = 37.64),
+                label = "San Francisco<br>Bay", family = "Dolly", size = 2,
+                colour = "grey20", alpha = 0.5,
+                fill = NA, label.colour = NA) +
+  geom_richtext(aes(x = bbox$xmax - 0.25, y = bbox$ymin),
+                label = "Plot: @ldbailey255 | Data: data.sfgov.org",
+                size = 1,
+                colour = "white",
+                fill = NA, label.colour = NA, family = "Quicksand",
+                hjust = 0, vjust = 0.5) +
+  #Add points coloured by rental price group
+  geom_sf(data = rent_price_sf_price_crop,
+          aes(colour = price_fct),
+          size = 0.25, alpha = 0.75, shape = 16) +
+  #Add text labels to show different locations
+  with_outer_glow(
+    geom_richtext(aes(x = -121.893158, y = 37.348490),
+                  label = "San Jose",
+                  colour = "grey60",
+                  fill = NA, label.colour = NA,
+                  size = 1.2),
+    colour = "white",
+    sigma = 2,
+    expand = 4,
+    alpha = 0.5
+  ) +
+    with_outer_glow(
+    geom_richtext(aes(x = -122.271167, y = 37.805359),
+                  label = "Oakland",
+                  colour = "grey60",
+                  fill = NA, label.colour = NA,
+                  size = 1.2),
+    colour = "white",
+    sigma = 2,
+    expand = 4,
+    alpha = 0.5
+  ) +
+    with_outer_glow(
+    geom_richtext(aes(x = -122.463780, y = 37.734819),
+                  label = "San<br>Francisco",
+                  colour = "grey60",
+                  fill = NA, label.colour = NA,
+                  size = 1.2),
+    colour = "white",
+    sigma = 2,
+    expand = 4,
+    alpha = 0.5
+  ) +
+  ## Define colour palette
+  scale_colour_manual(values = c('#FEF9A7', '#FAC213',
+                                 '#F77E21', '#D61C4E'),
+                      labels = c("<$2000",
+                                 "$2000-$3000",
+                                 "$3000-$4000",
+                                 ">$4000")) +
+  ## Restrict map to just bay area
+  coord_sf(crs = "EPSG:4326",
+           ylim = c(bbox$ymin, bbox$ymax),
+           xlim = c(bbox$xmin, bbox$xmax)) +
+  #Update theme
+  theme_void() +
+  theme(legend.position = c(0.85, 0.55),
+        legend.title = element_markdown(colour = "white", size = 5,
+                                    hjust = 0, family = "Quicksand",
+                                    lineheight = 1.2, face = "bold",
+                                    margin = margin(l = 5.5)),
+        legend.text = element_text(colour = "white", size = 4,
+                                   family = "Quicksand"),
+        panel.background = element_rect(fill = "light blue", colour = NA),
+        plot.background = element_rect(fill = "light blue", colour = NA),
+        plot.margin = margin(t = 0, b = 0,
+                             r = 0, l = 0)) +
+  guides(colour = guide_legend(reverse = TRUE,
+                               title = "Rental prices in<br>the Bay Area",
+                               keyheight = unit(3, units = "mm"),
+                               override.aes = aes(shape = 15,
+                                                  size = 3)))
+
+#Save
+ggsave(here::here("./plots/2022/Week27.png"), dpi = 600,
+       width = 4.95, height = 2.5)
+```
