@@ -1,0 +1,167 @@
+---
+title: "Week18"
+format: html
+editor: visual
+---
+
+```{r}
+
+desert  <- tidytuesdayR::tt_load(2023, week = 18)
+survey  <- desert$surveys
+species <- desert$species
+
+```
+
+# Load packages
+
+```{r}
+#| message: false
+library(ggplot2) # For plotting
+library(dplyr) # Data wrangling
+library(skimr) # Explor data
+library(showtext) # Custom fonts
+library(ggtext) ## For richtext
+library(geomtextpath) ## For curved text
+
+showtext::showtext_auto()
+showtext_opts(dpi = 600) # Makes sure the text is same res as plot
+sysfonts::font_add(family = "Plantin",
+                   regular = "Plantin_regular.otf")
+sysfonts::font_add(family = "Gravesend",
+                   regular = "Gravesend_Bold.otf")
+sysfonts::font_add(family = "Katarine",
+                   regular = "Katarine_regular.otf",
+                   bold = "Katarine_Semibold.otf")
+```
+
+# Explore data
+
+```{r}
+survey
+```
+
+```{r}
+## How many unique years of data do we have?
+survey |> 
+  mutate(year = lubridate::year(censusdate)) |> 
+  pull(year) |> 
+  range()
+```
+
+```{r}
+species
+```
+
+# Plot
+
+We have unique tags for (many) individuals, so we can determine oldest individuals ever observed for different species (any maybe by sex?)
+
+```{r}
+plot_data <- survey |> 
+  filter(!is.na(species) & !tag %in% c("0", "000000", "-1") & !is.na(tag) & !is.na(sex)) |> 
+  group_by(tag, ltag, species) |> 
+  ## Where * exists for a tag fill it down for that individual
+  ## This represents cases where a tag is reused for a new individual
+  tidyr::fill(note2) |> 
+  ungroup() |> 
+  ## Create new tag that differentiates between new and old tags
+  mutate(newtag = case_when(is.na(note2) ~ tag,
+                            TRUE ~ paste(tag, note2)),
+         newltag = case_when(is.na(note2) ~ ltag,
+                             TRUE ~ paste(ltag, note2))) |> 
+  ## For all individuals caught more than once, determine their max age
+  group_by(newtag, newltag, species) |> 
+  filter(n() > 1) |> 
+  summarise(species = first(species),
+            sex = first(sex),
+            samples = n(),
+            max_gap = max(diff(year)),
+            longevity = max(censusdate) - min(censusdate), .groups = "drop") |> 
+  ## Only include individuals that were resighted at least every 2 years
+  ## Excludes the few cases that seem likely to be retagged, but not recorded
+  filter(max_gap <= 2)
+
+## For each species, find the oldest observed individual
+oldest_per_species <- plot_data |> 
+  group_by(species) |> 
+  filter(longevity == max(longevity)) |> 
+  ungroup() |> 
+  arrange(species)
+
+oldest_per_species
+```
+
+Merge in species names and arrange factor order by oldest individuals
+
+```{r}
+oldest_per_species_full <- oldest_per_species |> 
+  left_join(select(species, species, scientificname, commonname, granivore)) |> 
+  mutate(species = forcats::fct_reorder(.f = species, .x = longevity, .fun = mean),
+         species_nr = as.numeric(species))
+```
+
+```{r}
+base <- ggplot() +
+   geom_hline(yintercept = seq(0, 9, 0.5),
+              linewidth = 0.1, lty = 2, colour = "white",
+              alpha = 0.15) +
+   geom_hline(yintercept = seq(0, 6, 1),
+              linewidth = 0.2, colour = "white",
+              alpha = 0.5) +
+   geom_col(data = oldest_per_species_full,
+            aes(x = species, y = as.numeric(longevity)/365,
+                fill = as.numeric(longevity)), position = position_dodge(width = 0.75), width = 0.4, alpha = 0.65) +
+   geom_hline(yintercept = 0,
+              linewidth = 0.5, colour = "white") +
+   labs(caption = "Plot: @ldbailey255 | Data: portal.weecology.org\nIndividuals with sighting gaps of >2 years were removed.") +
+   scale_fill_gradientn(colours = rev(c("#e6a644", "#e18339", "#b6571d", "#8c3313")), guide = "none") +
+   scale_y_continuous(limits = c(NA, 9),
+                      breaks = c(0, seq(2, 6, 1))) +
+   coord_polar(theta = "y", start = -1.5708, clip = "off") +
+   theme_classic() +
+   theme(axis.line = element_blank(),
+         axis.text.y = element_blank(),
+         axis.text.x = element_text(colour = "white", family = "Katarine", size = 10),
+         axis.title = element_blank(),
+         axis.ticks = element_blank(),
+         plot.caption = element_text(family = "Katarine",
+                                     colour = "white",
+                                     size = 5, hjust = 0),
+         panel.background = element_rect(fill = "#1e2437"),
+         plot.background = element_rect(fill = "#1e2437"))
+
+(output <- cowplot::ggdraw(plot = base) +
+  geom_richtext(aes(x = 0.125, y = 0.425,
+                    label = "**Rodents of Portal, AZ**"),
+                colour = "white", family = "Gravesend",
+                hjust = 0, vjust = 0, size = 4.5,
+                fill = NA, label.colour = NA) +
+  geom_richtext(aes(x = 0.125, y = 0.305, label = "Since 1977, The Portal Project has<br>been studying rodents in the Chihuahua Desert<br>near Portal, Arizona. Individuals are *tagged*<br>so they can be identified. Individuals of some species<br>lived for almost 6 years."),
+                colour = "white", family = "Katarine",
+                hjust = 0, vjust = 0, size = 3,
+                fill = NA, label.colour = NA,
+                lineheight = 1.1) +
+  geom_richtext(aes(x = 0.125, y = 0.425,
+                    label = "**Rodents of Portal, AZ**"),
+                colour = "white", family = "Gravesend",
+                hjust = 0, vjust = 0, size = 4.5,
+                fill = NA, label.colour = NA) +
+  geom_richtext(aes(x = 0.125, y = 0.175, label = "**HOW TO READ THIS PLOT:**<br>Each line represents a single rodent<br>species studied as part of The Portal Project.<br>The length of the line is the age of the oldest<br>known individual for each species."),
+                colour = "white", family = "Katarine",
+                hjust = 0, vjust = 0, size = 2.5,
+                fill = NA, label.colour = NA,
+                lineheight = 1.1) +
+  geom_textcurve(aes(x = 0.09, xend = 0.36,
+                     y = 0.6, yend = 0.925, label = "Age (years)"),
+                 colour = "white", curvature = -0.3,
+                 family = "Katarine",
+                 lineend = "round", ncp = 100) +
+  theme(plot.margin = margin(),
+        plot.background = element_blank()))
+```
+
+```{r}
+#Save
+## Add species names in photoshop
+ggsave(plot = output, filename = here::here("./plots/2023/Week18_raw.png"), dpi = 600, width = 6, height = 6)
+```
