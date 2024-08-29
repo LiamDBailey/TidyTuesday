@@ -1,0 +1,469 @@
+---
+title: "English Royal marriages"
+output:
+  html_document:
+    code_folding: show
+author: Liam D. Bailey
+date: '2024-08-23'
+description: "Where do the marriages come from?"
+categories: [R, Data viz]
+image: "feature.png"
+---
+
+```{r}
+#| echo: false
+#| message: false
+
+options(scipen = 200)
+
+library(showtext)
+#Load fonts
+sysfonts::font_add(family = "Camelot", regular = "Camelotcaps-aW2x.ttf")
+sysfonts::font_add(family = "Luminari", regular = "Luminari.ttf")
+sysfonts::font_add(family = "Magda", regular = "Magda-Ld4.ttf")
+
+#Specify that the showtext package should be used
+#for rendering text and the dpi
+showtext::showtext_auto()
+showtext_opts(dpi = 600)
+```
+
+</br>
+
+## Setup workspace
+
+---
+
+```{r, message=FALSE, error=FALSE, warning=FALSE}
+#| message: false
+#| warning: false
+
+## Data download
+library(tidytuesdayR)
+library(here)
+## Data wrangling
+library(dplyr)
+library(stringr)
+library(geodata)
+## Plots and tables
+library(ggplot2)
+library(s2)
+library(sf)
+library(ggtext)
+library(geomtextpath)
+```
+
+</br>
+
+## The data
+
+---
+
+Read in marriage data...
+
+```{r}
+## Load data
+(marriages <- tidytuesdayR::tt_load(2024, week = 34)$english_monarchs_marriages_df)
+```
+
+Clean and filter the data.
+
+- Just focus post Norman conquest (William I)
+- Remove royals that never married
+- Coerce year data to numeric
+
+```{r}
+marriages_postnorman <- marriages |>
+  slice(which(king_name == "William I"):n()) |> 
+  filter(consort_name != "–") |> 
+  mutate(year_of_marriage = as.numeric(na_if(year_of_marriage, "-")),
+         reformation = year_of_marriage >= 1558)
+
+## Differentiate between two Margarets of France
+marriages_postnorman$consort_name[marriages_postnorman$consort_name == "Margaret of France"] <- paste0("Margaret of France", c(" I", " II"))
+```
+
+</br>
+
+## Where is the spouse's house?
+
+---
+
+Read in data on where the spouse comes from. This contains info on:
+- Approximate lat/lon of birth place
+- File name for house coat of arms
+- Modern country that they (roughly) match
+- Whether they are pre or post reformation
+
+```{r}
+
+houses_latlon <- read.csv(here("./data/week34_royalmarriage/houses.csv")) |> 
+  ## Expand relative paths for coat of arms png
+  mutate(crest = file.path(here(), "data", "week34_royalmarriage", crest)) |> 
+  left_join(marriages_postnorman, by = "consort_name")
+
+```
+
+</br>
+
+## Mapping
+
+---
+
+Pick the central lat/lon that our map will be based around
+
+```{r}
+x_centre <- 8.5
+y_centre <- 49
+```
+
+Create sf object to show map graticules (better to build them manually because we can adjust the frequency of lines)
+
+```{r}
+meridian_long <- seq(-60, 60, 5)
+
+long_lines <- lapply(X = meridian_long, FUN = \(x){sf::st_linestring(x = data.frame(V1 = x, V2 = seq(0, 90, 1)) %>% as.matrix())}) %>% 
+  sf::st_sfc() %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_sf()
+
+meridian_lat <- seq(0, 90, 5)
+
+lat_lines <- lapply(X = meridian_lat, FUN = \(x){sf::st_linestring(x = data.frame(V1 = seq(-60, 60, 1), V2 = x) %>% as.matrix())}) %>% 
+  sf::st_sfc() %>% 
+  sf::st_set_crs("EPSG:4326") %>% 
+  sf::st_sf()
+
+#Combine together and crop inside the same circle
+graticules <- lat_lines %>% 
+  rbind(long_lines)
+```
+
+Use Near-side perspective CRS to simulate view from a satellite at a given height. This Azimuthal projection creates a 'globe' like effect. We model a view from 600km above the Earth.
+
+```{r}
+## The CRS
+proj <- "nsper"
+crs <- paste0("+proj=", proj, " +h=", 600000, " +lat_0=", y_centre, " +lon_0=", x_centre)
+
+## Convert out crest data into the correct CRS
+house_latlon_trans <- houses_latlon |> 
+  sf::st_as_sf(coords = c("lon", "lat"), crs = "EPSG:4326") |> 
+  sf::st_transform(crs)
+
+house_latlon_trans <- bind_cols(house_latlon_trans,
+                                sf::st_coordinates(house_latlon_trans))
+
+## For now we only focus on international marriages
+house_latlon_trans_int <- house_latlon_trans |> 
+  filter(!english)
+
+## Create a centre point representing London (in correct CRS)
+england_latlon_trans <- data.frame(lon = -0.1276, lat = 51.5072,
+                                   crest = here("./data/week34_royalmarriage/England.png")) |>
+  sf::st_as_sf(coords = c("lon", "lat"), crs = "EPSG:4326") |> 
+  sf::st_transform(crs)
+england_latlon_trans <- bind_cols(england_latlon_trans,
+                                  sf::st_coordinates(england_latlon_trans))
+
+## Extract country shapefiles using s2 geometry
+## This is preferable because polygons are properly designed to be projected
+## on a globe.
+globe <- as_s2_geography(TRUE)
+
+## This is an s2 geography of all countries on the globe
+countries <- s2_data_countries()
+
+## Clip these countries using a buffer around our centre point
+hemisphere <- s2_buffer_cells(as_s2_geography(paste0("POINT(", x_centre, " " , y_centre, ")")),
+                              1960000,
+                              max_cells = 5000)
+countries_clip <- s2_intersection(hemisphere, countries)
+
+## Convert to sf and transform to our Near-side perspective projection
+countries_sf <- st_transform(st_as_sfc(countries_clip),
+                             ## ortho projection around same centre point
+                             crs)
+
+## Create a similar clip for the ocean
+## This is necessary so that the edges of the 'globe' are visible
+ocean <- s2_difference(globe, s2_union_agg(countries))
+ocean_clip <- s2_intersection(hemisphere, ocean)
+ocean_sf <- st_transform(st_as_sfc(ocean_clip),
+                         ## ortho projection around same centre point
+                         crs)
+
+## Convert our graticules into the correct CRS
+graticules_crop <- graticules |>
+  sf::st_as_sf() |>
+  sf::st_transform(crs) |>
+  sf::st_intersection(ocean_sf)
+```
+
+Prepare the marriage data for plotting.
+
+```{r}
+house_latlon_trans_int <- house_latlon_trans_int |> 
+  ## Remove Wallis Simpson (too hard to fit USA onto the plot)
+  filter(!is.na(X))
+
+## Calculate the distance between each consort's birthplace and London
+## To do this, we first create a LINESTRING and then measure the length
+house_latlon_line <- house_latlon_trans_int |> 
+  reframe(line = paste0("LINESTRING(", X, " ", Y, ", ", england_latlon_trans$X, " ", england_latlon_trans$Y, ")")) |> 
+  pull(line) |> 
+  sf::st_as_sfc() |> 
+  sf::st_length()
+house_latlon_trans_int$distance <- house_latlon_line
+
+## We will draw curves to join each consort to London
+## To make sure the curves are a similar 'depth' we can change the angle
+## Proportionally to the distance.
+## Let's use Mary of Modena as our default curve
+default_dist <- house_latlon_trans_int |> 
+  filter(consort_name == "Mary of Modena") |> 
+  pull(distance)
+default_angle <- 0.175
+## Distance below which lines are forced to be straight
+min_dist <- 360000
+
+## Jitter data so that people from the same place have slightly offset lines
+house_latlon_trans_lines <- house_latlon_trans_int |> 
+  group_by(X, Y) |>
+  mutate(X = X + (seq(1, n(), 1)-1)*5000,
+         Y = Y + (seq(1, n(), 1)-1)*7000) |>
+  ungroup()
+
+```
+
+Create the raw globea (without anything else atm)
+
+```{r}
+## Create the raw map with countries, ocean, and graticules
+raw_map <- ggplot() +
+  geom_sf(data = ocean_sf, fill = "#223270") +
+  geom_sf(data = graticules_crop, linewidth = 0.1, colour = "white") +
+  geom_sf(data = countries_sf, fill = "grey30", colour = "white", linewidth = 0.1)
+
+raw_map
+```
+
+Create a loop to add line data to the globe. The exact curvature and text on each line will vary depending for each marriage
+
+```{r}
+new_map <- raw_map
+
+## For each marriage...
+for(i in 1:nrow(house_latlon_trans_lines)){
+  
+  focal_consort <- house_latlon_trans_lines[i, ]
+  ## Determine how the distance compares to our default (Mary of Modena)
+  prop_dist_diff <- (focal_consort$distance/default_dist)*2 ## Make the relationship a bit steeper so that shorter distances straighter
+  
+  ## If distance is below a certain amount, just make it straight
+  if (focal_consort$distance <= min_dist){
+    new_angle <- 0
+  } else {
+    ## Otherwise, adjust the angle based on the relative change in distance
+    new_angle <- default_angle/prop_dist_diff
+  }
+  
+  ## Locations to the West of London curve the other direction
+  if(focal_consort$X < england_latlon_trans$X){
+    new_angle <- new_angle*-1
+  }
+  
+  ## Add this new curve to the map
+  new_map <- new_map +
+    geom_curve(data = focal_consort,
+               aes(x = X, y = Y,
+                   xend = england_latlon_trans$X,
+                   yend = england_latlon_trans$Y),
+               curvature = new_angle, linewidth = 0.15,
+               colour = "white", ncp = 50)
+  
+  ## If we have decided to label the line, also write the consorts name
+  ## on the curve
+  if (focal_consort$label){
+    
+    new_map <- new_map +
+      geomtextpath::geom_textcurve(data = focal_consort,
+                                   aes(x = X, y = Y,
+                                       xend = england_latlon_trans$X,
+                                       yend = england_latlon_trans$Y,
+                                       label = consort_name),
+                                   curvature = new_angle, size = 1.5, linewidth = 0.5,
+                                   colour = "white", text_only = TRUE,
+                                   hjust = 0.1, vjust = focal_consort$vjust,
+                                   family = "Luminari", ncp = 50)
+    
+  }
+}
+
+new_map
+```
+
+Add in the family coat of arms for all consorts.
+
+```{r}
+map <- new_map +
+  ggimage::geom_image(data = house_latlon_trans_int |> 
+                        ## Filter out Wallis Simpson
+                        filter(crest != ""),
+                      aes(x = X, y = Y, image = crest), size = 0.02) +
+  ggimage::geom_image(data = england_latlon_trans,
+                      aes(x = X, y = Y, image = crest),
+                      size = 0.07) +
+  theme_void() +
+  theme(panel.background = element_blank())
+
+map
+```
+
+Save this as a grob object to combine into a single plot
+
+```{r}
+map_grob <- ggplot2::ggplotGrob(map)
+```
+
+Also create a bar graph showing the region each spouse came from and whether the marriage was before or after the reformation.
+
+```{r}
+plot_data <- houses_latlon |> 
+  filter(modern_country != "England") |> 
+  ## For each country...
+  group_by(modern_country) |> 
+  ## Count the number of marriages in total and before/after the reformation
+  summarise(n = n(), Protestant = sum(reformation), Catholic = sum(!reformation)) |> 
+  ## Select the 5 most populous countries for marriages
+  mutate(modern_country = forcats::fct_reorder(modern_country, .x = n)) |> 
+  arrange(desc(modern_country)) |> 
+  slice(1:5) |> 
+  ## Pivot longer so we can have a different bar colour for Catholics and Protestants
+  tidyr::pivot_longer(cols = Protestant:Catholic)
+
+plot_data
+```
+
+Total number of marriages
+
+```{r}
+total <- sum(plot_data$value)
+```
+
+Create bar graph and save as a grob object.
+
+```{r}
+bar_graph <- ggplot() +
+  ## Create a column for each country, coloured for Protestant/Catholic
+  geom_col(data = plot_data,
+           aes(y = modern_country, x = value, fill = name),
+           colour = "grey10") +
+  ## Add text to each bar
+  geom_text(data = plot_data,
+            aes(y = modern_country, x = n-0.25, label = n),
+            hjust = 2, colour = "white",
+            family = "Luminari") +
+  geom_text(data = plot_data,
+            aes(y = modern_country, x = n+0.5, label = modern_country),
+            colour = "white", hjust = 0,
+            family = "Luminari") +
+  ## Add arrows and text to explain the colour differences
+  geom_curve(aes(xend = 4, x = 5,
+                 yend = 5, y = 6),
+             arrow = arrow(length = unit(0.1, "inches")), colour = "white") +
+  geom_text(aes(x = 5.25,
+                y = 6, label = "Before the English Reformation"), size = 3.5,
+            colour = "#bc2e2e", hjust = 0, family = "Luminari") +
+  geom_curve(aes(xend = 1.5, x = 2.5,
+                 yend = 1, y = 0),
+             arrow = arrow(length = unit(0.1, "inches")), colour = "white",
+             curvature = -0.5) +
+  geom_text(aes(x = 2.75,
+                y = 0, label = "After the English Reformation"), size = 3.5,
+            colour = "#0d6793", hjust = 0, family = "Luminari") +
+  labs(y = "Number of Marriages") +
+  ## Define scales
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_fill_manual(values = c("#bc2e2e", "#0d6793")) +
+  coord_cartesian(clip = "off") +
+  ## Aesthetic change
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 10, colour = "white",
+                                    family = "Luminari"),
+        axis.ticks = element_blank(),
+        axis.line.x = element_blank(),
+        axis.line.y = element_line(linewidth = 1, colour = "white"),
+        plot.background = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "none")
+
+bar_grob <- ggplot2::ggplotGrob(bar_graph)
+```
+
+Combine all data together
+
+```{r}
+map_w_title <- ggplot() +
+  ## Add in globe with coat of arms
+  ggplot2::annotation_custom(map_grob,
+                             xmin = 0.3, xmax = 1.2, ymin = -0.3, ymax = 1.3) +
+  ## Add in bar graph
+  ggplot2::annotation_custom(bar_grob,
+                             xmin = -0.045, xmax = 0.4,
+                             ymin = 0.45, ymax = 1) +
+  ## Add in body of text
+  ## Make sure that we use similar text colouring to emphasise our bargraph legend
+  ggtext::geom_richtext(aes(x = -0.025, y = 0.2,
+                            label = paste0('<p>Since the Norman conquest (1066) the British Royal
+                    family has made ', total, '<br>international marriages. <span style="color: #bc2e2e">Before the English Reformation</span>, many of these<br>unions were made with Catholic powerhouses France and Spain. <span style="color: #0d6793">After the<br>English reformation</span> (16th century), marriages shift towards countries like<br>Denmark and Germany. Through almost a millenia of court politics, we see<br>the British royals shift from French speaking Catholics to English speaking<br>Protestants.</p><br><br><p><span style="font-family:Magda;">HOW TO READ<br>THIS PLOT</span></p>')),
+                    hjust = 0, label.colour = NA, fill = NA, colour = "white",
+                    family = "Luminari", size = 3.5) +
+  ## Add in example line to help readers understand the plot
+  geom_segment(aes(x = 0.11, xend = 0.22,
+                   y = 0.075, yend = 0.075),
+               linewidth = 0.15, colour = "white") +
+  geom_textcurve(aes(x = 0.11, xend = 0.22,
+                     y = 0.075, yend = 0.075,
+                     label = "Eleanor of Provence"),
+                 colour = "white", vjust = 0.25, hjust = 0.5,
+                 size = 3,
+                 family = "Luminari", curvature = 0, text_only = TRUE) +
+  ggtext::geom_richtext(aes(x = 0.165,
+                            y = 0.075,
+                            label = "Each line shows a single<br>marriage"),
+                        label.colour = NA, fill = NA, colour = "white", vjust = 1.05, hjust = 0.5,
+                        size = 2.5,
+                        family = "Luminari") +
+  ## Add in example coat of arms to help readers understand the plot
+  ggimage::geom_image(aes(x = 0.275, y = 0.055, image = here("./data/week34_royalmarriage/Provence.png")), size = 0.075) +
+  ggtext::geom_richtext(aes(x = 0.3, y = 0.055,
+                            label = "Each Coat of Arms shows the<br>heraldry and birthplace of a<br>future royal consort*"),
+                        hjust = 0, label.colour = NA, fill = NA, colour = "white",
+                        family = "Luminari", size = 2.5) +
+  ## Title, subtitle and caption
+  ## Notice that our title uses two different fonts to create the caligraphy capitals
+  labs(title = '<p style="font-family:Magda;"><span style="font-family:Camelot;font-size:85pt">I</span>nternational <span style="font-family:Camelot;font-size:85pt">M</span>arriages</p>',
+       subtitle = "of the British Royal Family",
+       caption = "Marriage Data: ianvisits.co.uk | Coat of arms: wappenwiki.org/<br>Plot: Liam D. Bailey | *Birthplaces are jittered slightly to avoid overlap. Wallis Simpson (USA) is excluded.") +
+  ## Explicitly set the plot limits
+  ## This is vital when adding grob objects, because dynamic axis doesn't work
+  ## so will in this case
+  coord_cartesian(xlim = c(0, 1), ylim = c(0, 1)) +
+  ## Adjust aesthetic
+  theme_void() +
+  theme(plot.background = element_rect(fill = "#181D33"),
+        plot.title = element_markdown(hjust = 0.025, vjust = 0, size = 35,
+                                      colour = "white"),
+        plot.subtitle = element_markdown(colour = "white", family = "Luminari",
+                                         size = 30, hjust = 0.025),
+        plot.caption = element_markdown(colour = "white", family = "Luminari",
+                                        size = 7, hjust = 0, margin = margin(b = 10, l = 25)),
+        plot.margin = margin(t = 10, l = 10)
+  )
+
+## Save plot
+ggsave(plot = map_w_title, filename = here("./plots/2024/Week34_marriages.png"), width = 12, height = 7, device = ragg::agg_png, dpi = 600)
+```
