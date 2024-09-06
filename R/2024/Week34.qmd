@@ -81,6 +81,8 @@ marriages_postnorman <- marriages |>
 
 ## Differentiate between two Margarets of France
 marriages_postnorman$consort_name[marriages_postnorman$consort_name == "Margaret of France"] <- paste0("Margaret of France", c(" I", " II"))
+## Shortern name of Sophia-Dorothea (for easier plotting)
+marriages_postnorman$consort_name[marriages_postnorman$consort_name == "Sophia Dorothea of Brunswick-Lueneburg-Celle"] <- "Sophia Dorothea of Celle"
 ```
 
 </br>
@@ -96,12 +98,33 @@ Read in data on where the spouse comes from. This contains info on:
 - Whether they are pre or post reformation
 
 ```{r}
-
 houses_latlon <- read.csv(here("./data/week34_royalmarriage/houses.csv")) |> 
   ## Expand relative paths for coat of arms png
   mutate(crest = file.path(here(), "data", "week34_royalmarriage", crest)) |> 
-  left_join(marriages_postnorman, by = "consort_name")
+  left_join(marriages_postnorman, by = "consort_name") |> 
+  ## Filter out English and American marriages
+  filter(!english & modern_country != "America")
 
+houses_latlon_lines <- houses_latlon |> 
+  ## For consorts from exactly the same location jitter slightly
+  group_by(lon, lat) |>
+  mutate(lon = lon + (seq(1, n(), 1)-1)*0.15,
+         lat = lat + (seq(1, n(), 1)-1)*0.15) |>
+  ungroup()
+
+## Create a linestring using spherical geometry (i.e. greater circle)
+linestring <- purrr::map2(.x = houses_latlon_lines$lat, .y = houses_latlon_lines$lon, function(lat, lon){
+  
+  sf::st_as_sfc(geosphere::gcIntermediate(c(lon, lat), c(-0.1276, 51.5072), 
+                            n = 100, addStartEnd = TRUE, 
+                            sp = TRUE)) |> 
+    sf::st_as_sf()
+  
+}) |> 
+  bind_rows()
+
+## Add this back to our data, transforming it into an sf object
+houses_latlon_sf <- bind_cols(linestring, houses_latlon_lines)
 ```
 
 </br>
@@ -146,23 +169,26 @@ Use Near-side perspective CRS to simulate view from a satellite at a given heigh
 proj <- "nsper"
 crs <- paste0("+proj=", proj, " +h=", 600000, " +lat_0=", y_centre, " +lon_0=", x_centre)
 
-## Convert out crest data into the correct CRS
-house_latlon_trans <- houses_latlon |> 
-  sf::st_as_sf(coords = c("lon", "lat"), crs = "EPSG:4326") |> 
+## Convert our line data into the correct CRS
+house_latlon_trans_lines <- houses_latlon_sf |> 
   sf::st_transform(crs)
 
-house_latlon_trans <- bind_cols(house_latlon_trans,
-                                sf::st_coordinates(house_latlon_trans))
+## Also create data for the location of the house crests
+## NOTE: This data is *not* jittered to remove overlap
+house_latlon_trans_points <- houses_latlon |> 
+  sf::st_as_sf(coords = c("lon", "lat"),
+               crs = "EPSG:4326") |> 
+  sf::st_transform(crs)
 
-## For now we only focus on international marriages
-house_latlon_trans_int <- house_latlon_trans |> 
-  filter(!english)
+house_latlon_trans_points <- bind_cols(house_latlon_trans_points,
+                                       sf::st_coordinates(house_latlon_trans_points))
 
 ## Create a centre point representing London (in correct CRS)
 england_latlon_trans <- data.frame(lon = -0.1276, lat = 51.5072,
                                    crest = here("./data/week34_royalmarriage/England.png")) |>
   sf::st_as_sf(coords = c("lon", "lat"), crs = "EPSG:4326") |> 
   sf::st_transform(crs)
+
 england_latlon_trans <- bind_cols(england_latlon_trans,
                                   sf::st_coordinates(england_latlon_trans))
 
@@ -200,43 +226,7 @@ graticules_crop <- graticules |>
   sf::st_intersection(ocean_sf)
 ```
 
-Prepare the marriage data for plotting.
-
-```{r}
-house_latlon_trans_int <- house_latlon_trans_int |> 
-  ## Remove Wallis Simpson (too hard to fit USA onto the plot)
-  filter(!is.na(X))
-
-## Calculate the distance between each consort's birthplace and London
-## To do this, we first create a LINESTRING and then measure the length
-house_latlon_line <- house_latlon_trans_int |> 
-  reframe(line = paste0("LINESTRING(", X, " ", Y, ", ", england_latlon_trans$X, " ", england_latlon_trans$Y, ")")) |> 
-  pull(line) |> 
-  sf::st_as_sfc() |> 
-  sf::st_length()
-house_latlon_trans_int$distance <- house_latlon_line
-
-## We will draw curves to join each consort to London
-## To make sure the curves are a similar 'depth' we can change the angle
-## Proportionally to the distance.
-## Let's use Mary of Modena as our default curve
-default_dist <- house_latlon_trans_int |> 
-  filter(consort_name == "Mary of Modena") |> 
-  pull(distance)
-default_angle <- 0.175
-## Distance below which lines are forced to be straight
-min_dist <- 360000
-
-## Jitter data so that people from the same place have slightly offset lines
-house_latlon_trans_lines <- house_latlon_trans_int |> 
-  group_by(X, Y) |>
-  mutate(X = X + (seq(1, n(), 1)-1)*5000,
-         Y = Y + (seq(1, n(), 1)-1)*7000) |>
-  ungroup()
-
-```
-
-Create the raw globea (without anything else atm)
+Create the raw globe (without anything else atm)
 
 ```{r}
 ## Create the raw map with countries, ocean, and graticules
@@ -248,57 +238,26 @@ raw_map <- ggplot() +
 raw_map
 ```
 
+
 Create a loop to add line data to the globe. The exact curvature and text on each line will vary depending for each marriage
 
 ```{r}
-new_map <- raw_map
-
-## For each marriage...
-for(i in 1:nrow(house_latlon_trans_lines)){
-  
-  focal_consort <- house_latlon_trans_lines[i, ]
-  ## Determine how the distance compares to our default (Mary of Modena)
-  prop_dist_diff <- (focal_consort$distance/default_dist)*2 ## Make the relationship a bit steeper so that shorter distances straighter
-  
-  ## If distance is below a certain amount, just make it straight
-  if (focal_consort$distance <= min_dist){
-    new_angle <- 0
-  } else {
-    ## Otherwise, adjust the angle based on the relative change in distance
-    new_angle <- default_angle/prop_dist_diff
-  }
-  
-  ## Locations to the West of London curve the other direction
-  if(focal_consort$X < england_latlon_trans$X){
-    new_angle <- new_angle*-1
-  }
-  
-  ## Add this new curve to the map
-  new_map <- new_map +
-    geom_curve(data = focal_consort,
-               aes(x = X, y = Y,
-                   xend = england_latlon_trans$X,
-                   yend = england_latlon_trans$Y),
-               curvature = new_angle, linewidth = 0.15,
-               colour = "white", ncp = 50)
-  
-  ## If we have decided to label the line, also write the consorts name
-  ## on the curve
-  if (focal_consort$label){
-    
-    new_map <- new_map +
-      geomtextpath::geom_textcurve(data = focal_consort,
-                                   aes(x = X, y = Y,
-                                       xend = england_latlon_trans$X,
-                                       yend = england_latlon_trans$Y,
-                                       label = consort_name),
-                                   curvature = new_angle, size = 1.5, linewidth = 0.5,
-                                   colour = "white", text_only = TRUE,
-                                   hjust = 0.1, vjust = focal_consort$vjust,
-                                   family = "Luminari", ncp = 50)
-    
-  }
-}
+new_map <- raw_map +
+  ## Draw all lines
+  geom_sf(data = house_latlon_trans_lines,
+          colour = "white", linewidth = 0.15) +
+  geomtextpath::geom_textsf(data = house_latlon_trans_lines |> 
+                              filter(label & vjust == 0.25),
+                            aes(label = consort_name),
+                            colour = "white", size = 1.5,
+                            hjust = 0.075, family = "Luminari",
+                            linewidth = 0, vjust = 0.25) +
+  geomtextpath::geom_textsf(data = house_latlon_trans_lines |> 
+                              filter(label & vjust == 1),
+                            aes(label = consort_name),
+                            colour = "white", size = 1.5,
+                            hjust = 0.075, family = "Luminari",
+                            linewidth = 0, vjust = 1)
 
 new_map
 ```
@@ -307,10 +266,8 @@ Add in the family coat of arms for all consorts.
 
 ```{r}
 map <- new_map +
-  ggimage::geom_image(data = house_latlon_trans_int |> 
-                        ## Filter out Wallis Simpson
-                        filter(crest != ""),
-                      aes(x = X, y = Y, image = crest), size = 0.02) +
+  ggimage::geom_image(data = house_latlon_trans_points,
+                      aes(x = X, y = Y, image = crest), size = 0.015) +
   ggimage::geom_image(data = england_latlon_trans,
                       aes(x = X, y = Y, image = crest),
                       size = 0.07) +
@@ -330,7 +287,7 @@ Also create a bar graph showing the region each spouse came from and whether the
 
 ```{r}
 plot_data <- houses_latlon |> 
-  filter(modern_country != "England") |> 
+  filter(!modern_country %in% c("England", "America")) |> 
   ## For each country...
   group_by(modern_country) |> 
   ## Count the number of marriages in total and before/after the reformation
